@@ -7,6 +7,21 @@ import re
 from dotenv import load_dotenv
 from pathlib import Path
 from openai import OpenAI
+import json
+
+# path to file that tracks processed item IDs
+PROCESSED_FILE = Path(__file__).resolve().parent / "processed.json"
+
+# load processed IDs or initialize empty set
+if PROCESSED_FILE.exists():
+    with open(PROCESSED_FILE, "r") as f:
+        processed_ids = set(json.load(f))
+else:
+    processed_ids = set()
+
+def save_processed():
+    with open(PROCESSED_FILE, "w") as f:
+        json.dump(list(processed_ids), f)
 
 # load .env from the script's directory
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
@@ -48,15 +63,11 @@ def generate_image(prompt: str) -> bytes:
 def upload_image_to_wp(image_bytes: bytes, filename: str) -> int:
     """Upload image bytes to WordPress media library and return the attachment ID."""
     files = {
-        'file': (filename, io.BytesIO(image_bytes), 'image/png')
-    }
-    headers = {
-        'Content-Disposition': f'form-data; name="file"; filename="{filename}"'
+        'file': (filename, image_bytes, 'image/png')
     }
     resp = requests.post(
         f"{WP_URL}/wp-json/wp/v2/media",
         auth=AUTH,
-        headers=headers,
         files=files
     )
     resp.raise_for_status()
@@ -147,6 +158,9 @@ def run():
         items = get_all_items(content_type)
         for item in items:
             post_id = item["id"]
+            if post_id in processed_ids:
+                print(f"⏭️ Already processed {content_type[:-1]} {post_id}, skipping.")
+                continue
             title = item.get("title", {}).get("rendered", "").strip()
             if post_needs_keyphrase(item):
                 body = item.get("content", {}).get("rendered", "")
@@ -183,6 +197,8 @@ def run():
                     print(f"✅ Fully updated post {post_id}: '{meta.get('title')}'")
                     updated = requests.get(endpoint, auth=AUTH).json()
                     print(f"🔗 URL: {updated.get('link')}")
+                    processed_ids.add(post_id)
+                    save_processed()
                 else:
                     print(f"❌ Failed to fully update post {post_id}: {resp.text}")
             else:
