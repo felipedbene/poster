@@ -1,0 +1,3 @@
+# ignore just our virtualenv & envfile
+.venv/
+.env
