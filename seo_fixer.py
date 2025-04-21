@@ -9,6 +9,17 @@ from pathlib import Path
 from openai import OpenAI
 import json
 from typing import Optional
+import time
+import logging
+from PIL import Image
+
+# configure basic logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 # path to file that tracks processed item IDs
 PROCESSED_FILE = Path(__file__).resolve().parent / "processed.json"
@@ -54,28 +65,40 @@ def generate_image(prompt: str) -> bytes:
     resp = client.images.generate(
         prompt=prompt,
         n=1,
-        size="1024x1024"
+        size="512x512"
     )
     image_url = resp.data[0].url
     img_resp = requests.get(image_url)
     img_resp.raise_for_status()
-    return img_resp.content
+    image_data = img_resp.content
+    # Convert to WebP to reduce file size
+    img = Image.open(io.BytesIO(image_data))
+    buffer = io.BytesIO()
+    img.save(buffer, format="WEBP", quality=80)
+    return buffer.getvalue()
 
 def upload_image_to_wp(image_bytes: bytes, filename: str) -> Optional[int]:
-    """Upload image bytes to WordPress media library and return the attachment ID."""
-    files = {
-        'file': (filename, image_bytes, 'image/png')
-    }
+    """Upload image bytes to the WordPress media library and set alt text."""
     try:
-        resp = requests.post(
-            f"{WP_URL}/wp-json/wp/v2/media",
+        files = {'file': (filename, image_bytes, 'image/webp')}
+        response = requests.post(f"{WP_URL}/wp-json/wp/v2/media", auth=AUTH, files=files)
+        response.raise_for_status()
+        media = response.json()
+        media_id = media.get('id')
+        # Set alt text based on filename (without extension)
+        alt_text = Path(filename).stem
+        requests.patch(
+            f"{WP_URL}/wp-json/wp/v2/media/{media_id}",
             auth=AUTH,
-            files=files
+            json={'alt_text': alt_text}
         )
-        resp.raise_for_status()
-        return resp.json()['id']
+        logger.info(f"Uploaded image '{filename}' as media ID {media_id} with alt text '{alt_text}'")
+        return media_id
     except requests.exceptions.HTTPError as e:
-        print(f"⚠️ Image upload failed: {e}")
+        logger.error(f"Failed to upload image '{filename}': {e} - Response: {response.text}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error uploading image '{filename}': {e}")
         return None
 
 def get_all_items(item_type):
@@ -182,7 +205,7 @@ def run():
                     img_prompt = f"An evocative illustration for blog post titled: '{title}'."
                     print(f"🖼️ Generating image for post {post_id}")
                     img_bytes = generate_image(img_prompt)
-                    media_id = upload_image_to_wp(img_bytes, f"post-{post_id}-featured.png")
+                    media_id = upload_image_to_wp(img_bytes, f"post-{post_id}-featured.webp")
                     if media_id:
                         print(f"🆙 Uploaded image as media ID {media_id}")
                     else:
