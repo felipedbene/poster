@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 from openai import OpenAI
 import json
+from typing import Optional
 
 # path to file that tracks processed item IDs
 PROCESSED_FILE = Path(__file__).resolve().parent / "processed.json"
@@ -60,18 +61,22 @@ def generate_image(prompt: str) -> bytes:
     img_resp.raise_for_status()
     return img_resp.content
 
-def upload_image_to_wp(image_bytes: bytes, filename: str) -> int:
+def upload_image_to_wp(image_bytes: bytes, filename: str) -> Optional[int]:
     """Upload image bytes to WordPress media library and return the attachment ID."""
     files = {
         'file': (filename, image_bytes, 'image/png')
     }
-    resp = requests.post(
-        f"{WP_URL}/wp-json/wp/v2/media",
-        auth=AUTH,
-        files=files
-    )
-    resp.raise_for_status()
-    return resp.json()['id']
+    try:
+        resp = requests.post(
+            f"{WP_URL}/wp-json/wp/v2/media",
+            auth=AUTH,
+            files=files
+        )
+        resp.raise_for_status()
+        return resp.json()['id']
+    except requests.exceptions.HTTPError as e:
+        print(f"⚠️ Image upload failed: {e}")
+        return None
 
 def get_all_items(item_type):
     items = []
@@ -172,13 +177,16 @@ def run():
                 meta = ai_meta(title, body)
                 rewritten = rewrite_content(body)
                 # If item has no featured image, generate and upload one
+                media_id = None
                 if not item.get("featured_media"):
                     img_prompt = f"An evocative illustration for blog post titled: '{title}'."
                     print(f"🖼️ Generating image for post {post_id}")
                     img_bytes = generate_image(img_prompt)
-                    img_name = f"post-{post_id}-featured.png"
-                    media_id = upload_image_to_wp(img_bytes, img_name)
-                    print(f"🆙 Uploaded image as media ID {media_id}")
+                    media_id = upload_image_to_wp(img_bytes, f"post-{post_id}-featured.png")
+                    if media_id:
+                        print(f"🆙 Uploaded image as media ID {media_id}")
+                    else:
+                        print(f"⚠️ Skipping setting featured image for post {post_id}")
                 else:
                     media_id = item.get("featured_media")
                 # Prepare payload to update title, meta description, focus keyword, content, and featured image
@@ -188,9 +196,10 @@ def run():
                         "yoast_wpseo_metadesc": meta.get("description"),
                         "yoast_wpseo_focuskw": meta.get("title")
                     },
-                    "content": rewritten,
-                    "featured_media": media_id
+                    "content": rewritten
                 }
+                if media_id:
+                    full_payload["featured_media"] = media_id
                 endpoint = f"{WP_URL}/wp-json/wp/v2/{content_type}/{post_id}"
                 resp = requests.patch(endpoint, auth=AUTH, json=full_payload)
                 if resp.ok:
