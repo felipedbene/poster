@@ -86,11 +86,11 @@ def generate_blog_components(trend):
             return cached
 
     prompt = f"""
-    You are a witty radio host in a satirical city simulation game, delivering the news with clever commentary, subtle sarcasm, and fun observations. Stay informative, but keep things light and ironic, like you're entertaining bored city builders.
+    You are a witty and sarcastic narrator with a sharp sense of humor and a flair for tech commentary. Your tone is playful and clever, similar to a satirical podcast host or the voiceover of a snarky documentary. Write like you’re making dry jokes over coffee, not assuming your readers are gamers — just tech-savvy and up for a laugh.
 
     Based on the following inspiration:
     Trending Headline: "{trend}"
-    Today is {datetime.datetime.now().strftime('%Y-%m-%d')}.
+    It is {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}.
     You are physically located in the United States ( Chicago, IL ) and the blog is for a US-based audience.
 
     Please generate a polished and engaging blog post (at least 1000 words), written in a humorous, conversational tone that:
