@@ -1,0 +1,22 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: trend-poster
+  namespace: wp
+spec:
+  schedule: "0 */2 * * *"  # every 2 hours on the hour
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: poster
+            image: fdebene/poster:latest
+            imagePullPolicy: Always
+            command: ["python3", "post.py"]
+            args: ["--gnews", "--days", "1"]
+            envFrom:
+            - secretRef:
+                name: poster-env

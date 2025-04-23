@@ -1,0 +1,10 @@
+tunnel: e5f54835-aec6-4998-a08e-bb6bd53d6340
+credentials-file: /etc/cloudflared/credentials.json
+ingress:
+  - hostname: blog.debene.dev
+    service: http://wordpress-frenzy.wp.svc.cluster.local:80
+  - hostname: debene.dev
+    service: http://wordpress-frenzy.wp.svc.cluster.local:80
+    originRequest:
+      httpHostHeader: blog.debene.dev
+  - service: http_status:404

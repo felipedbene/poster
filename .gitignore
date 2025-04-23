@@ -4,3 +4,6 @@
 *.json
 *.png
 *.webp
+__pycache__/
+.cache/
+# ignore all our test files
