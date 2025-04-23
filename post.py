@@ -418,81 +418,75 @@ def main():
         return results
 
     if args.gnews:
-        logging.info("📡 Starting continuous GNews blogging loop")
-        try:
-            while True:
-                logging.info("📥 Fetching new trending topics from GNews...")
-                all_trends = fetch_trending_topics(count=10)
-                logging.info(f"🌐 Retrieved {len(all_trends)} headlines.")
-                for trend in all_trends:
-                    logging.info(f"🧵 New trend: {trend}")
-                    # Redis deduplication
-                    r = redis.Redis(
-                        host=os.getenv("REDIS_HOST", "redis-master.wp.svc.cluster.local"),
-                        port=6379,
-                        password=os.getenv("REDIS_PASSWORD"),
-                        decode_responses=True
+        logging.info("📥 Fetching new trending topics from GNews...")
+        all_trends = fetch_trending_topics(count=10)
+        logging.info(f"🌐 Retrieved {len(all_trends)} headlines.")
+        for trend in all_trends:
+            logging.info(f"🧵 New trend: {trend}")
+            # Redis deduplication
+            r = redis.Redis(
+                host=os.getenv("REDIS_HOST", "redis-master.wp.svc.cluster.local"),
+                port=6379,
+                password=os.getenv("REDIS_PASSWORD"),
+                decode_responses=True
+            )
+            trend_key = f"trend:{hashlib.sha1(trend.encode()).hexdigest()}"
+            if r.exists(trend_key):
+                logging.info(f"⏩ Skipping already-processed trend: {trend}")
+                continue
+            r.setex(trend_key, 86400, "seen")  # 24h TTL
+            for attempt in range(3):
+                try:
+                    blog_raw = generate_blog_components(trend)
+                    parsed = parse_generated_text(blog_raw)
+                    # Determine if post already exists by slug
+                    existing_posts = fetch_all_posts_metadata()
+                    existing = next((p for p in existing_posts if p["slug"] == parsed["slug"]), None)
+                    post_id = existing.get("id") if existing else None
+                    idea = parsed['title']
+                    keyphrase = parsed['keyphrase']
+
+                    all_posts = existing_posts
+                    parsed['body'] = enrich_with_internal_links(parsed['body'], all_posts)
+
+                    title_plain = parsed['title']
+                    if parsed['body'].lstrip().startswith(title_plain):
+                        parsed['body'] = parsed['body'].lstrip()[len(title_plain):].lstrip()
+
+                    image_path = generate_image(parsed['image_prompt'])
+                    media_id, media_url = upload_image_to_wp(image_path, parsed['alt_text'])
+
+                    pub_date = pub_date_gmt = None
+                    if args.days > 0:
+                        delta_days = random.uniform(0, args.days)
+                        delta_secs = random.uniform(0, 86400)
+                        dt = datetime.datetime.now() - datetime.timedelta(days=delta_days, seconds=delta_secs)
+                        pub_date = dt.strftime("%Y-%m-%dT%H:%M:%S")
+                        pub_date_gmt = dt.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+                        status = "publish"
+                    else:
+                        status = "draft"
+
+                    parsed['keyphrase'] = parsed.get('keyphrase') or keyphrase
+                    logging.info(f"📝 Posting blog for: {parsed['title']} (from: {trend})")
+                    result = upload_post(
+                        parsed['title'], parsed['slug'], parsed['body'],
+                        parsed['meta_title'], parsed['meta_desc'],
+                        parsed['keyphrase'], media_id,
+                        publish_date=pub_date,
+                        publish_date_gmt=pub_date_gmt,
+                        status=status,
+                        post_id=post_id
                     )
-                    trend_key = f"trend:{hashlib.sha1(trend.encode()).hexdigest()}"
-                    if r.exists(trend_key):
-                        logging.info(f"⏩ Skipping already-processed trend: {trend}")
-                        continue
-                    r.setex(trend_key, 86400, "seen")  # 24h TTL
-                    for attempt in range(3):
-                        try:
-                            blog_raw = generate_blog_components(trend)
-                            parsed = parse_generated_text(blog_raw)
-                            # Determine if post already exists by slug
-                            existing_posts = fetch_all_posts_metadata()
-                            existing = next((p for p in existing_posts if p["slug"] == parsed["slug"]), None)
-                            post_id = existing.get("id") if existing else None
-                            idea = parsed['title']
-                            keyphrase = parsed['keyphrase']
-
-                            all_posts = existing_posts
-                            parsed['body'] = enrich_with_internal_links(parsed['body'], all_posts)
-
-                            title_plain = parsed['title']
-                            if parsed['body'].lstrip().startswith(title_plain):
-                                parsed['body'] = parsed['body'].lstrip()[len(title_plain):].lstrip()
-
-                            image_path = generate_image(parsed['image_prompt'])
-                            media_id, media_url = upload_image_to_wp(image_path, parsed['alt_text'])
-
-                            pub_date = pub_date_gmt = None
-                            if args.days > 0:
-                                delta_days = random.uniform(0, args.days)
-                                delta_secs = random.uniform(0, 86400)
-                                dt = datetime.datetime.now() - datetime.timedelta(days=delta_days, seconds=delta_secs)
-                                pub_date = dt.strftime("%Y-%m-%dT%H:%M:%S")
-                                pub_date_gmt = dt.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-                                status = "publish"
-                            else:
-                                status = "draft"
-
-                            parsed['keyphrase'] = parsed.get('keyphrase') or keyphrase
-                            logging.info(f"📝 Posting blog for: {parsed['title']} (from: {trend})")
-                            result = upload_post(
-                                parsed['title'], parsed['slug'], parsed['body'],
-                                parsed['meta_title'], parsed['meta_desc'],
-                                parsed['keyphrase'], media_id,
-                                publish_date=pub_date,
-                                publish_date_gmt=pub_date_gmt,
-                                status=status,
-                                post_id=post_id
-                            )
-                            logging.info(f"✅ Upsert complete → {result.get('link')}")
-                            update_seo_meta(result.get('id'), parsed['meta_title'], parsed['meta_desc'], parsed['keyphrase'])
-                            logging.info(f"📢 Published: {result.get('link')}")
-                            break
-                        except Exception as e:
-                            wait = 2 ** attempt
-                            logging.warning(f"⚠️ OpenAI call failed (attempt {attempt+1}) for trend: {trend} → retrying in {wait}s\nReason: {e}")
-                            time.sleep(wait)
-                logging.info(f"⏲️ Sleeping {args.interval} seconds before next check")
-                time.sleep(args.interval)
-        except KeyboardInterrupt:
-            logging.info("👋 Interrupted by user. Exiting loop.")
+                    logging.info(f"✅ Upsert complete → {result.get('link')}")
+                    update_seo_meta(result.get('id'), parsed['meta_title'], parsed['meta_desc'], parsed['keyphrase'])
+                    logging.info(f"📢 Published: {result.get('link')}")
+                    break
+                except Exception as e:
+                    wait = 2 ** attempt
+                    logging.warning(f"⚠️ OpenAI call failed (attempt {attempt+1}) for trend: {trend} → retrying in {wait}s\nReason: {e}")
+                    time.sleep(wait)
+        return
     else:
         parser.add_argument('--idea', required=True)
         parser.add_argument('--keyphrase', required=True)
