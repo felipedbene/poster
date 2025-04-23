@@ -11,7 +11,8 @@ docker buildx build \
   -t fdebene/poster:latest \
   --push .
 
-echo "🚀 Triggering manual CronJob run..."
+echo "🚀 Recreating CronJob manually..."
+kubectl delete job trend-poster-now -n wp --ignore-not-found
 kubectl create job --from=cronjob/trend-poster trend-poster-now -n wp
 sleep 10
 kubectl logs job/trend-poster-now -n wp -f
