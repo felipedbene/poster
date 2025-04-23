@@ -33,32 +33,35 @@ Automatically generate, publish, and update SEO-optimized blog posts to WordPres
    pip install -r requirements.txt
    ```
 
-3. **Create a `.env` file**:
+3. **Create a `.env` file** with WordPress, OpenAI, GNews, and Redis configuration:
    ```ini
    WORDPRESS_URL=https://your-blog.com
    WORDPRESS_USERNAME=your_wp_user
    WORDPRESS_APP_PASSWORD=your_app_password
    OPENAI_API_KEY=sk-...
    GNEWS_API_KEY=your_gnews_key
+   REDIS_HOST=redis-master.wp.svc.cluster.local # This is namespace dependant
+   REDIS_PASSWORD=your_redis_password  # Only if Redis auth is enabled
    ```
+   Ensure your environment (e.g., `poster-env`) contains these variables for Redis integration.
 
 ## Usage
 
 ```bash
-# Start infinite loop, posting trending news
-python post.py --gnews --interval 600 --days 2
+# Manually trigger a one-time CronJob execution:
+kubectl create job --from=cronjob/trend-poster trend-poster-now -n wp
+kubectl logs -n wp job/trend-poster-now -f
 ```
 
-- `--interval`: seconds between GNews fetches (default: 900s)
-- `--days`: backdate published posts randomly within N days
-- `--page`: create as page instead of post
+**Note:** Redis is used to deduplicate headlines for 24 hours to avoid reposting the same content.
 
 ### Example logs:
 ```text
-📡 Starting continuous GNews blogging loop
+📡 Starting trend fetch and post
 🧵 New trend: Robot see, robot do...
 ✅ Upsert complete → https://your-blog.com/2025/04/22/ai-learns-from-videos/
 📢 Published: https://your-blog.com/2025/04/22/ai-learns-from-videos/
+🎉 Job completed successfully
 ```
 
 ## Features
@@ -82,4 +85,4 @@ rm -rf .cache/
 
 ## License
 
-MIT © Your Name
+MIT © Felipe De Bene
