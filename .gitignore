@@ -2,3 +2,5 @@
 .venv/
 .env
 *.json
+*.png
+*.webp

@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trend-poster
+  namespace: wp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trend-poster
+  template:
+    metadata:
+      labels:
+        app: trend-poster
+    spec:
+      containers:
+      - name: poster
+        image: fdebene/poster:latest
+        imagePullPolicy: Always
+        envFrom:
+        - secretRef:
+            name: poster-env
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+        command: ["python3", "post.py"]
+        args: ["--gnews", "--interval", "600", "--days", "2"]
+      restartPolicy: Always
