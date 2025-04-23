@@ -449,6 +449,14 @@ def main():
         ]
     )
 
+    # Healthcheck start ping (as soon as script starts)
+    if HC_APIKEY:
+        try:
+            requests.get(f"https://hc-ping.com/{HC_APIKEY}/start", timeout=5)
+            logging.info("🚀 Healthcheck start ping sent.")
+        except Exception as e:
+            logging.warning(f"⚠️ Failed to send healthcheck start ping: {e}")
+
     if args.scan_broken:
         scan_broken_links()
         return
@@ -593,17 +601,17 @@ def main():
             published_links.append(post_link)
             print(f"✅ Published {idx}: {post_link}")
 
-        # Healthcheck ping if enabled
-        if HC_APIKEY:
-            try:
-                requests.get(f"https://hc-ping.com/{HC_APIKEY}", timeout=5)
-                print("✅ Healthcheck ping sent.")
-            except Exception as e:
-                print(f"⚠️ Failed to send healthcheck ping: {e}")
-
         print("📄 Summary of published post links:")
         for link in published_links:
             print(link)
+
+    # Healthcheck ping at the end if enabled and script completed successfully
+    if HC_APIKEY:
+        try:
+            requests.get(f"https://hc-ping.com/{HC_APIKEY}", timeout=5)
+            logging.info("✅ Healthcheck ping sent.")
+        except Exception as e:
+            logging.warning(f"⚠️ Failed to send healthcheck ping: {e}")
 
 # TODO: Implement internal link enrichment — scan past posts and inject semantic internal links into parsed['body'] based on relevance
 
