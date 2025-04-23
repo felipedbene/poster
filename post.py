@@ -13,6 +13,9 @@ import re
 from dotenv import load_dotenv
 from PIL import Image
 import redis
+import logging
+import time
+import sys
 
 # Load .env
 load_dotenv()
@@ -361,12 +364,44 @@ def enrich_with_internal_links(parsed_body, all_posts):
     else:
         return parsed_body
 
+def fetch_trending_topics(count=5):
+    api_key = os.getenv("GNEWS_API_KEY")
+    url = f"https://gnews.io/api/v4/top-headlines?token={api_key}&lang=en&max={count}"
+    res = requests.get(url)
+    articles = res.json().get("articles", [])
+    return [article["title"] for article in articles]
+
+def fetch_all_posts_metadata():
+    results = []
+    page = 1
+    while True:
+        try:
+            resp = requests.get(
+                f"{WP_URL}/wp-json/wp/v2/posts",
+                auth=(WP_USER, WP_PASS),
+                params={"per_page": 100, "page": page}
+            )
+            if resp.status_code == 400:
+                break
+            resp.raise_for_status()
+            posts = resp.json()
+            if not posts:
+                break
+            for p in posts:
+                results.append({
+                    "title": p["title"]["rendered"],
+                    "slug": p["slug"],
+                    "id": p["id"]
+                })
+            page += 1
+        except requests.exceptions.RequestException as e:
+            logging.warning(f"⚠️ Failed to fetch page {page}: {e}")
+            break
+    return results
+
 def main():
-    import logging
-    import time
-    import sys
     parser = argparse.ArgumentParser()
-    parser.add_argument('--gnews', action='store_true', help='Fetch trending topics from GNews continuously')
+    parser.add_argument('--gnews', action='store_true', help='Fetch trending topics from GNews')
     parser.add_argument('--interval', type=int, default=900, help='Interval in seconds between fetches (default 900s)')
     parser.add_argument('--days', type=int, default=0, help='Range of past days for randomized publication date')
     parser.add_argument('--page', action='store_true', help='Create pages instead of posts')
@@ -385,37 +420,6 @@ def main():
     if args.scan_broken:
         scan_broken_links()
         return
-
-    def fetch_trending_topics(count=5):
-        api_key = os.getenv("GNEWS_API_KEY")
-        url = f"https://gnews.io/api/v4/top-headlines?token={api_key}&lang=en&max={count}"
-        res = requests.get(url)
-        articles = res.json().get("articles", [])
-        return [article["title"] for article in articles]
-
-    def fetch_all_posts_metadata():
-        results = []
-        page = 1
-        while True:
-            try:
-                resp = requests.get(
-                    f"{WP_URL}/wp-json/wp/v2/posts",
-                    auth=(WP_USER, WP_PASS),
-                    params={"per_page": 100, "page": page}
-                )
-                if resp.status_code == 400:
-                    break  # No more pages
-                resp.raise_for_status()
-                posts = resp.json()
-                if not posts:
-                    break
-                for p in posts:
-                    results.append({"title": p["title"]["rendered"], "slug": p["slug"], "id": p["id"]})
-                page += 1
-            except requests.exceptions.RequestException as e:
-                logging.warning(f"⚠️ Failed to fetch page {page}: {e}")
-                break
-        return results
 
     if args.gnews:
         logging.info("📥 Fetching new trending topics from GNews...")
