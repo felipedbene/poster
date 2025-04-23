@@ -20,12 +20,44 @@ import sys
 # Load .env
 load_dotenv()
 
+# Healthcheck API key (optional)
+HC_APIKEY = os.getenv("HC_APIKEY")
+
 # Config
 WP_USER = os.getenv("WORDPRESS_USERNAME")
 WP_PASS = os.getenv("WORDPRESS_APP_PASSWORD")
 WP_URL = os.getenv("WORDPRESS_URL")
 OPENAI_KEY = os.getenv("OPENAI_API_KEY")
-assert OPENAI_KEY, "❌ OPENAI_API_KEY not set"
+
+# Redis config
+REDIS_HOST = os.getenv("REDIS_HOST", "redis-master.wp.svc.cluster.local")
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
+
+# Grouped environment variable validation
+REQUIRED_CREDENTIALS = {
+    "WORDPRESS_USERNAME": WP_USER,
+    "WORDPRESS_APP_PASSWORD": WP_PASS,
+    "WORDPRESS_URL": WP_URL
+}
+
+REQUIRED_API_KEYS = {
+    "OPENAI_API_KEY": OPENAI_KEY,
+    "GNEWS_API_KEY": os.getenv("GNEWS_API_KEY")
+}
+
+missing_creds = [key for key, value in REQUIRED_CREDENTIALS.items() if not value]
+missing_keys = [key for key, value in REQUIRED_API_KEYS.items() if not value]
+
+if missing_creds or missing_keys:
+    problems = []
+    if missing_creds:
+        problems.append(f"Missing credentials: {', '.join(missing_creds)}")
+    if missing_keys:
+        problems.append(f"Missing API keys: {', '.join(missing_keys)}")
+    raise EnvironmentError("❌ " + " | ".join(problems))
+
+GNEWS_API_KEY = REQUIRED_API_KEYS["GNEWS_API_KEY"]
+
 openai.api_key = OPENAI_KEY
 
 def load_cached_post(idea, keyphrase):
@@ -365,7 +397,7 @@ def enrich_with_internal_links(parsed_body, all_posts):
         return parsed_body
 
 def fetch_trending_topics(count=5):
-    api_key = os.getenv("GNEWS_API_KEY")
+    api_key = GNEWS_API_KEY
     url = f"https://gnews.io/api/v4/top-headlines?token={api_key}&lang=en&max={count}"
     res = requests.get(url)
     articles = res.json().get("articles", [])
@@ -429,9 +461,9 @@ def main():
             logging.info(f"🧵 New trend: {trend}")
             # Redis deduplication
             r = redis.Redis(
-                host=os.getenv("REDIS_HOST", "redis-master.wp.svc.cluster.local"),
+                host=REDIS_HOST,
                 port=6379,
-                password=os.getenv("REDIS_PASSWORD"),
+                password=REDIS_PASSWORD,
                 decode_responses=True
             )
             trend_key = f"trend:{hashlib.sha1(trend.encode()).hexdigest()}"
@@ -560,6 +592,14 @@ def main():
             post_link = result.get('link')
             published_links.append(post_link)
             print(f"✅ Published {idx}: {post_link}")
+
+        # Healthcheck ping if enabled
+        if HC_APIKEY:
+            try:
+                requests.get(f"https://hc-ping.com/{HC_APIKEY}", timeout=5)
+                print("✅ Healthcheck ping sent.")
+            except Exception as e:
+                print(f"⚠️ Failed to send healthcheck ping: {e}")
 
         print("📄 Summary of published post links:")
         for link in published_links:
