@@ -86,18 +86,20 @@ def generate_blog_components(trend):
             return cached
 
     prompt = f"""
-    You are a thoughtful, well-informed, and engaging writer crafting professional-grade blog content for a general but intelligent audience. Based on the following inspiration:
+    You are a witty radio host in a satirical city simulation game, delivering the news with clever commentary, subtle sarcasm, and fun observations. Stay informative, but keep things light and ironic, like you're entertaining bored city builders.
+
+    Based on the following inspiration:
     Trending Headline: "{trend}"
     Today is {datetime.datetime.now().strftime('%Y-%m-%d')}.
     You are physically located in the United States ( Chicago, IL ) and the blog is for a US-based audience.
 
-    Please generate a polished and insightful blog post (at least 1000 words), written in a clear, professional, and slightly conversational tone that:
+    Please generate a polished and engaging blog post (at least 1000 words), written in a humorous, conversational tone that:
       - Seamlessly incorporates the keyphrase **(choose a suitable SEO keyphrase)** at least 2–3 times for SEO purposes.
       - Includes at least one useful and relevant outbound link (<a href="https://">).
-      - Balances clarity and depth, making complex topics accessible without oversimplifying.
-      - Reflects careful structure and flow, using transitions to connect ideas fluidly.
+      - Balances wit and clarity, delivering real information through satirical flair.
+      - Reflects careful structure and flow, using humorous transitions and punchlines to connect ideas.
       - Is suitable for readers with diverse backgrounds — not just technical.
-      - Fun
+      - Is fun, like morning news meets stand-up comedy.
 
     Additionally generate:
       - A compelling SEO meta title
@@ -361,6 +363,31 @@ def scan_broken_links():
         f.writelines(broken)
     print(f"🔍 Scan complete. {len(broken)} broken links written to {output_file}")
 
+def inject_adsense_snippet(html):
+    ad_html = """
+<!-- Google AdSense Ad -->
+<div style="margin: 2em 0; padding: 1em; border-top: 1px dashed #ccc; font-family: 'Lora', Georgia, serif;">
+  <small style="display: block; text-align: center; color: #888; margin-bottom: 0.5em;">
+    🪙 Supports Lipe Land
+  </small>
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1479106809372421"
+     crossorigin="anonymous"></script>
+  <ins class="adsbygoogle"
+       style="display:block; text-align:center;"
+       data-ad-layout="in-article"
+       data-ad-format="fluid"
+       data-ad-client="ca-pub-1479106809372421"
+       data-ad-slot="6648621056"></ins>
+  <script>
+       (adsbygoogle = window.adsbygoogle || []).push({});
+  </script>
+</div>
+"""
+    paragraphs = html.split("</p>")
+    if len(paragraphs) > 1:
+        paragraphs.insert(1, ad_html)
+    return "</p>".join(paragraphs)
+
 def enrich_with_internal_links(parsed_body, all_posts):
     """
     Insert internal links to other posts with overlapping words near the end of the body.
@@ -431,6 +458,17 @@ def fetch_all_posts_metadata():
             break
     return results
 
+def send_healthcheck_ping():
+    """
+    Send a healthcheck ping to the configured endpoint.
+    """
+    try:
+        r = requests.get("https://hc-ping.com/b6d51ccc-3470-479d-8ba9-a793f65ad02b", timeout=5)
+        logging.info(f"✅ Healthcheck ping sent with status {r.status_code}")
+    except Exception as e:
+        logging.warning(f"⚠️ Failed to send healthcheck ping: {e}")
+
+    # Invoke the healthcheck ping function
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--gnews', action='store_true', help='Fetch trending topics from GNews')
@@ -448,18 +486,6 @@ def main():
             logging.StreamHandler(sys.stdout)
         ]
     )
-
-    # Healthcheck start ping (as soon as script starts)
-    if HC_APIKEY:
-        try:
-            requests.get(f"https://hc-ping.com/{HC_APIKEY}/start", timeout=5)
-            logging.info("🚀 Healthcheck start ping sent.")
-        except Exception as e:
-            logging.warning(f"⚠️ Failed to send healthcheck start ping: {e}")
-
-    if args.scan_broken:
-        scan_broken_links()
-        return
 
     if args.gnews:
         logging.info("📥 Fetching new trending topics from GNews...")
@@ -489,8 +515,9 @@ def main():
                     post_id = existing.get("id") if existing else None
                     idea = parsed['title']
                     keyphrase = parsed['keyphrase']
-
                     all_posts = existing_posts
+                    # Inject AdSense snippet before internal links
+                    parsed['body'] = inject_adsense_snippet(parsed['body'])
                     parsed['body'] = enrich_with_internal_links(parsed['body'], all_posts)
 
                     title_plain = parsed['title']
@@ -530,7 +557,6 @@ def main():
                     wait = 2 ** attempt
                     logging.warning(f"⚠️ OpenAI call failed (attempt {attempt+1}) for trend: {trend} → retrying in {wait}s\nReason: {e}")
                     time.sleep(wait)
-        return
     else:
         parser.add_argument('--idea', required=True)
         parser.add_argument('--keyphrase', required=True)
@@ -550,6 +576,8 @@ def main():
             parsed = parse_generated_text(raw)
 
             all_posts = fetch_all_posts_metadata()
+            # Inject AdSense snippet before internal links
+            parsed['body'] = inject_adsense_snippet(parsed['body'])
             parsed['body'] = enrich_with_internal_links(parsed['body'], all_posts)
 
             # Remove duplicated plain-title if present
@@ -604,14 +632,9 @@ def main():
         print("📄 Summary of published post links:")
         for link in published_links:
             print(link)
-
-    # Healthcheck ping at the end if enabled and script completed successfully
-    if HC_APIKEY:
-        try:
-            requests.get(f"https://hc-ping.com/{HC_APIKEY}", timeout=5)
-            logging.info("✅ Healthcheck ping sent.")
-        except Exception as e:
-            logging.warning(f"⚠️ Failed to send healthcheck ping: {e}")
+    logging.info("📡 Attempting to send final healthcheck ping...")
+    send_healthcheck_ping()
+    logging.info("📡 Healthcheck ping execution finished.")
 
 # TODO: Implement internal link enrichment — scan past posts and inject semantic internal links into parsed['body'] based on relevance
 
