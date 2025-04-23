@@ -272,6 +272,14 @@ def parse_generated_text(raw_text):
         elif current == 'body':
             body.append(line)
     parsed['body'] = "\n".join(body)
+    # --- Trim SEO fields to safe limits
+    if 'meta_title' in parsed and parsed['meta_title']:
+        parsed['meta_title'] = parsed['meta_title'][:60].strip()
+    if 'meta_desc' in parsed and parsed['meta_desc']:
+        parsed['meta_desc'] = parsed['meta_desc'][:155].strip()
+    if 'slug' in parsed and parsed['slug']:
+        # Limit slug to 6 hyphenated words
+        parsed['slug'] = '-'.join(parsed['slug'].split('-')[:6])
     print("🧠 Parsed SEO metadata →", {
         "meta_title": parsed.get("meta_title"),
         "meta_desc": parsed.get("meta_desc"),
