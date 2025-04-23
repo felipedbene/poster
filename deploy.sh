@@ -11,11 +11,13 @@ docker buildx build \
   -t fdebene/poster:latest \
   --push .
 
-echo "🚀 Rolling out new version in Kubernetes..."
-kubectl rollout restart deployment trend-poster -n wp
+echo "🚀 Triggering manual CronJob run..."
+kubectl create job --from=cronjob/trend-poster trend-poster-now -n wp
+sleep 10
+kubectl logs job/trend-poster-now -n wp -f
 
 echo "⏳ Waiting 10 seconds for pod to start..."
-sleep 10
+sleep 20
 
 echo "📜 Tailing logs from trend-poster..."
 kubectl logs -n wp -l app=trend-poster -f
