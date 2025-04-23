@@ -1,0 +1,100 @@
+2025-04-22 16:33:49,760 📡 Starting continuous GNews blogging loop
+2025-04-22 16:33:49,760 📥 Fetching new trending topics from GNews...
+2025-04-22 16:33:50,057 🌐 Retrieved 10 headlines.
+2025-04-22 16:33:50,058 🧵 New trend: Robot see, robot do: System learns after watching how-to videos
+2025-04-22 16:33:54,939 📝 Posting blog for: The Dawn of Learning Robots: How AI Systems Master Skills by Watching Videos (from: Robot see, robot do: System learns after watching how-to videos)
+2025-04-22 16:33:55,150 ✅ Upsert complete → https://blog.debene.dev/2025/04/20/learning-robots-master-skills-from-videos/
+2025-04-22 16:33:56,491 📢 Published: https://blog.debene.dev/2025/04/20/learning-robots-master-skills-from-videos/
+2025-04-22 16:33:56,491 🧵 New trend: Pope Francis remembered for backing peace process in Mindanao
+2025-04-22 16:34:03,043 📝 Posting blog for: Pope Francis and the Path to Peace in Mindanao (from: Pope Francis remembered for backing peace process in Mindanao)
+2025-04-22 16:34:03,821 ✅ Upsert complete → https://blog.debene.dev/2025/04/20/pope-francis-mindanao-peace-process/
+2025-04-22 16:34:05,094 📢 Published: https://blog.debene.dev/2025/04/20/pope-francis-mindanao-peace-process/
+2025-04-22 16:34:05,095 🧵 New trend: PAGASA: Rains expected in Mindanao due to ITCZ
+2025-04-22 16:34:10,828 📝 Posting blog for: Understanding the Impact of the Intertropical Convergence Zone on Weather Patterns (from: PAGASA: Rains expected in Mindanao due to ITCZ)
+2025-04-22 16:34:11,039 ✅ Upsert complete → https://blog.debene.dev/2025/04/21/impact-intertropical-convergence-zone-weather/
+2025-04-22 16:34:11,850 📢 Published: https://blog.debene.dev/2025/04/21/impact-intertropical-convergence-zone-weather/
+2025-04-22 16:34:11,850 🧵 New trend: Sydney residents shaken awake by early morning earthquake in NSW Hunter Valley
+2025-04-22 16:34:22,046 Retrying request to /chat/completions in 0.411219 seconds
+2025-04-22 16:34:32,527 Retrying request to /chat/completions in 0.879382 seconds
+2025-04-22 16:34:43,458 ⚠️ OpenAI call failed (attempt 1) for trend: Sydney residents shaken awake by early morning earthquake in NSW Hunter Valley → retrying in 1s
+Reason: Request timed out.
+2025-04-22 16:34:54,536 Retrying request to /chat/completions in 0.470483 seconds
+2025-04-22 16:35:05,075 Retrying request to /chat/completions in 0.775980 seconds
+2025-04-22 16:35:16,176 ⚠️ OpenAI call failed (attempt 2) for trend: Sydney residents shaken awake by early morning earthquake in NSW Hunter Valley → retrying in 2s
+Reason: Request timed out.
+2025-04-22 16:35:28,261 Retrying request to /chat/completions in 0.388869 seconds
+2025-04-22 16:35:38,735 Retrying request to /chat/completions in 0.801701 seconds
+2025-04-22 16:35:39,346 👋 Interrupted by user. Exiting loop.
+2025-04-22 16:37:11,011 📡 Starting continuous GNews blogging loop
+2025-04-22 16:37:11,011 📥 Fetching new trending topics from GNews...
+2025-04-22 16:37:11,163 🌐 Retrieved 10 headlines.
+2025-04-22 16:37:11,163 🧵 New trend: Robot see, robot do: System learns after watching how-to videos
+2025-04-22 16:37:14,776 👋 Interrupted by user. Exiting loop.
+2025-04-22 16:37:19,738 📡 Starting continuous GNews blogging loop
+2025-04-22 16:37:19,738 📥 Fetching new trending topics from GNews...
+2025-04-22 16:37:19,891 🌐 Retrieved 10 headlines.
+2025-04-22 16:37:19,891 🧵 New trend: Robot see, robot do: System learns after watching how-to videos
+2025-04-22 16:37:30,051 Retrying request to /chat/completions in 0.386775 seconds
+2025-04-22 16:37:40,494 Retrying request to /chat/completions in 0.768244 seconds
+2025-04-22 16:37:51,310 ⚠️ OpenAI call failed (attempt 1) for trend: Robot see, robot do: System learns after watching how-to videos → retrying in 1s
+Reason: Request timed out.
+2025-04-22 16:38:02,393 Retrying request to /chat/completions in 0.448507 seconds
+2025-04-22 16:38:07,590 👋 Interrupted by user. Exiting loop.
+2025-04-22 16:40:18,939 📡 Starting continuous GNews blogging loop
+2025-04-22 16:40:18,939 📥 Fetching new trending topics from GNews...
+2025-04-22 16:40:19,169 🌐 Retrieved 10 headlines.
+2025-04-22 16:40:19,169 🧵 New trend: Robot see, robot do: System learns after watching how-to videos
+2025-04-22 16:40:29,305 Retrying request to /chat/completions in 0.378661 seconds
+2025-04-22 16:40:31,810 👋 Interrupted by user. Exiting loop.
+2025-04-22 16:44:35,417 📡 Starting continuous GNews blogging loop
+2025-04-22 16:44:35,417 📥 Fetching new trending topics from GNews...
+2025-04-22 16:44:35,569 🌐 Retrieved 10 headlines.
+2025-04-22 16:44:35,569 🧵 New trend: Robot see, robot do: System learns after watching how-to videos
+2025-04-22 16:44:45,674 Retrying request to /chat/completions in 0.482395 seconds
+2025-04-22 16:44:52,971 👋 Interrupted by user. Exiting loop.
+2025-04-22 16:46:03,606 📡 Starting continuous GNews blogging loop
+2025-04-22 16:46:03,606 📥 Fetching new trending topics from GNews...
+2025-04-22 16:46:03,763 🌐 Retrieved 10 headlines.
+2025-04-22 16:46:03,763 🧵 New trend: Robot see, robot do: System learns after watching how-to videos
+2025-04-22 16:46:08,477 👋 Interrupted by user. Exiting loop.
+2025-04-22 16:46:09,788 📡 Starting continuous GNews blogging loop
+2025-04-22 16:46:09,788 📥 Fetching new trending topics from GNews...
+2025-04-22 16:46:09,939 🌐 Retrieved 10 headlines.
+2025-04-22 16:46:09,939 🧵 New trend: Robot see, robot do: System learns after watching how-to videos
+2025-04-22 16:46:20,018 Retrying request to /chat/completions in 0.442412 seconds
+2025-04-22 16:46:22,236 👋 Interrupted by user. Exiting loop.
+2025-04-22 16:47:05,857 📡 Starting continuous GNews blogging loop
+2025-04-22 16:47:05,857 📥 Fetching new trending topics from GNews...
+2025-04-22 16:47:06,343 🌐 Retrieved 10 headlines.
+2025-04-22 16:47:06,344 🧵 New trend: Robot see, robot do: System learns after watching how-to videos
+2025-04-22 16:47:28,319 HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-04-22 16:47:47,258 HTTP Request: POST https://api.openai.com/v1/images/generations "HTTP/1.1 200 OK"
+2025-04-22 16:47:49,354 📝 Posting blog for: Robot See, Robot Do: How AI Learns from Watching Videos (from: Robot see, robot do: System learns after watching how-to videos)
+2025-04-22 16:47:49,682 ✅ Upsert complete → https://blog.debene.dev/2025/04/19/ai-learning-from-videos/
+2025-04-22 16:47:50,927 📢 Published: https://blog.debene.dev/2025/04/19/ai-learning-from-videos/
+2025-04-22 16:47:50,928 🧵 New trend: Pope Francis remembered for backing peace process in Mindanao
+2025-04-22 16:48:18,994 HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-04-22 16:48:37,901 HTTP Request: POST https://api.openai.com/v1/images/generations "HTTP/1.1 200 OK"
+2025-04-22 16:48:41,526 📝 Posting blog for: Pope Francis and the Peace Process in Mindanao: A Legacy of Hope (from: Pope Francis remembered for backing peace process in Mindanao)
+2025-04-22 16:48:41,825 ✅ Upsert complete → https://blog.debene.dev/2025/04/20/pope-francis-peace-process-mindanao/
+2025-04-22 16:48:43,094 📢 Published: https://blog.debene.dev/2025/04/20/pope-francis-peace-process-mindanao/
+2025-04-22 16:48:43,094 🧵 New trend: PAGASA: Rains expected in Mindanao due to ITCZ
+2025-04-22 16:49:05,776 HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-04-22 16:49:25,263 HTTP Request: POST https://api.openai.com/v1/images/generations "HTTP/1.1 200 OK"
+2025-04-22 16:49:29,433 📝 Posting blog for: The Ripple Effects of the ITCZ: Understanding Weather Patterns in Mindanao (from: PAGASA: Rains expected in Mindanao due to ITCZ)
+2025-04-22 16:49:29,824 ✅ Upsert complete → https://blog.debene.dev/2025/04/22/impact-of-itcz-on-mindanao-weather/
+2025-04-22 16:49:31,336 📢 Published: https://blog.debene.dev/2025/04/22/impact-of-itcz-on-mindanao-weather/
+2025-04-22 16:49:31,336 🧵 New trend: Sydney residents shaken awake by early morning earthquake in NSW Hunter Valley
+2025-04-22 16:49:52,724 HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-04-22 16:50:10,713 HTTP Request: POST https://api.openai.com/v1/images/generations "HTTP/1.1 200 OK"
+2025-04-22 16:50:12,904 📝 Posting blog for: When the Earth Shakes: Understanding Earthquake Risks in Urban Areas (from: Sydney residents shaken awake by early morning earthquake in NSW Hunter Valley)
+2025-04-22 16:50:13,159 ✅ Upsert complete → https://blog.debene.dev/2025/04/21/understanding-earthquake-risks-urban-areas/
+2025-04-22 16:50:14,646 📢 Published: https://blog.debene.dev/2025/04/21/understanding-earthquake-risks-urban-areas/
+2025-04-22 16:50:14,647 🧵 New trend: NATO panic as major European country plots action on Russia border
+2025-04-22 16:50:38,227 HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-04-22 16:50:54,202 HTTP Request: POST https://api.openai.com/v1/images/generations "HTTP/1.1 200 OK"
+2025-04-22 16:50:56,140 📝 Posting blog for: Rising Tensions: The Strategic Calculations on Russia's Border (from: NATO panic as major European country plots action on Russia border)
+2025-04-22 16:50:56,432 ✅ Upsert complete → https://blog.debene.dev/2025/04/20/nato-european-strategy-russia-border/
+2025-04-22 16:50:57,686 📢 Published: https://blog.debene.dev/2025/04/20/nato-european-strategy-russia-border/
+2025-04-22 16:50:57,687 🧵 New trend: Fixing the Hubble Space Telescope: A timeline of NASA's shuttle servicing missions
+2025-04-22 16:51:11,534 👋 Interrupted by user. Exiting loop.
