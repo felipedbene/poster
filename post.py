@@ -1,4 +1,27 @@
-import re
+from markdown.extensions.fenced_code import FencedCodeExtension
+from markdown.extensions.codehilite import CodeHiliteExtension
+
+# --- Helper: Fetch or create taxonomy terms by name ---
+def get_term_ids(names: list[str], taxonomy: str) -> list[int]:
+    """
+    Fetch existing terms by name or create them if they don't exist.
+    Returns a list of term IDs.
+    """
+    ids = []
+    for name in names:
+        # Search for existing term
+        resp = requests.get(f"{WP_URL}/wp-json/wp/v2/{taxonomy}", auth=(WP_USER, WP_PASS), params={"search": name})
+        resp.raise_for_status()
+        terms = resp.json()
+        if terms:
+            term_id = terms[0]["id"]
+        else:
+            # Create new term
+            create = requests.post(f"{WP_URL}/wp-json/wp/v2/{taxonomy}", auth=(WP_USER, WP_PASS), json={"name": name})
+            create.raise_for_status()
+            term_id = create.json()["id"]
+        ids.append(term_id)
+    return ids
 
 # Helper to convert "* " list lines to HTML lists
 def auto_convert_lists(html: str) -> str:
@@ -39,16 +62,84 @@ import json
 import datetime
 import random
 import re
+
+# --- Helper: Strip front-matter fences and nested headings ---
+def _strip_frontmatter(text: str) -> str:
+    """Remove YAML front-matter fences and any nested headings."""
+    # Remove any top-level YAML fences
+    text = re.sub(r'(?s)^---.*?---\s*', '', text)
+    return text
 from dotenv import load_dotenv
 from PIL import Image
 from io import BytesIO
 import base64
-import redis
 import logging
 import time
 import sys
 import yaml
 import frontmatter
+
+# --- Helper: Generate a detailed outline for a blog topic using LLM ---
+def generate_blog_outline(topic):
+    """
+    Generate a detailed outline (list of section headings) for the given topic.
+    """
+    outline_prompt = f"""
+You have up to 500 tokens—generate a detailed JSON list of section headings (strings) for a **parody article** on “{topic}”.
+Imagine it as a witty, sarcastic, or over-the-top humorous take.
+Only output a valid JSON array of strings, e.g. ["Ridiculous Introduction", "Absurd Claims", "Conclusion Full of Regret"].
+Limit the JSON array to exactly 3 section headings.
+"""
+    resp = requests.post(
+        f"http://{OLLAMA_SERVER}/api/generate",
+        json={
+            "model": "llama3.2:latest",
+            "prompt": outline_prompt,
+            "temperature": 0.3,
+            "max_tokens": 500,
+            "stream": False,
+            "device": "cuda",
+        },  
+        timeout=300
+    )
+    data = resp.json()
+    # Log raw outline response for debugging
+    raw_outline = data.get("response", "")
+    print(f"🔍 Raw outline response: {raw_outline}")
+    # Extract JSON array substring if the model wrapped it in extra text
+    import re
+    match = re.search(r'\[.*\]', raw_outline, flags=re.DOTALL)
+    outline_json = match.group(0) if match else raw_outline
+    try:
+        return json.loads(outline_json)
+    except Exception as e:
+        print(f"⚠️ Failed to parse outline JSON: {e}")
+        return []
+
+# --- Helper: Generate a one-sentence summary of HTML content via LLM ---
+def generate_summary(html_content: str) -> str:
+    """
+    Generate a one-sentence summary of the given HTML content via LLM.
+    """
+    summary_prompt = f""" 
+You have up to 100 tokens—summarize the following article in one concise sentence:
+\"\"\"{html_content[:1000]}...\"\"\"
+Only output the summary sentence.
+"""
+    resp = requests.post(
+        f"http://{OLLAMA_SERVER}/api/generate",
+        json={
+            "model": "llama3.2:latest",
+            "prompt": summary_prompt,
+            "temperature": 0.7,
+            "max_tokens": 100,
+            "stream": False,
+            "device": "cuda",
+        },
+        timeout=120
+    )
+    data = resp.json()
+    return data.get("response", "").strip()
 
 try:
     import markdown
@@ -58,6 +149,8 @@ except ImportError:
 
 # Load .env
 load_dotenv()
+# Load SD_API_URL after .env is loaded
+SD_API_BASE = os.getenv("SD_API_URL", "http://127.0.0.1:7860")
 
 # Healthcheck API key (optional)
 HC_APIKEY = os.getenv("HC_APIKEY")
@@ -84,7 +177,7 @@ REQUIRED_CREDENTIALS = {
 
 REQUIRED_API_KEYS = {
     "OPENAI_API_KEY": OPENAI_KEY,
-    "GNEWS_API_KEY": os.getenv("GNEWS_API_KEY")
+    "NEWS_API": os.getenv("NEWS_API")
 }
 
 missing_creds = [key for key, value in REQUIRED_CREDENTIALS.items() if not value]
@@ -98,13 +191,13 @@ if missing_creds or missing_keys:
         problems.append(f"Missing API keys: {', '.join(missing_keys)}")
     raise EnvironmentError("❌ " + " | ".join(problems))
 
-GNEWS_API_KEY = REQUIRED_API_KEYS["GNEWS_API_KEY"]
+NEWS_API = REQUIRED_API_KEYS["NEWS_API"]
 
 #openai.api_key = OPENAI_KEY
 
 def load_cached_post(idea, keyphrase):
     cache_key = hashlib.sha256(f"{idea}:{keyphrase}".encode()).hexdigest()
-    cache_path = f".cache/posts/{cache_key}.json"
+    cache_path = f".cache/posts/{cache_key}.yaml"
     if not os.path.exists(cache_path):
         return None
     with open(cache_path, "r") as f:
@@ -120,7 +213,7 @@ def generate_blog_components(topic):
     #Create a cache directory if it doesn't exist
     os.makedirs(".cache/posts", exist_ok=True)
     cache_key = hashlib.sha256(topic.encode()).hexdigest()
-    cache_path = f".cache/posts/{cache_key}.json"
+    cache_path = f".cache/posts/{cache_key}.yaml"
     if os.path.exists(cache_path):
         with open(cache_path, "r") as f:
             cached = f.read()
@@ -130,76 +223,166 @@ def generate_blog_components(topic):
             print(f"💾 Cached blog retrieved for: {topic}")
             return cached
 
-    prompt = fr"""
-Always ONLY output YAML front-matter with these keys, even if empty:
-
-[Output starts here]
+    # Generate metadata front matter via LLM
+    meta_prompt = f"""
+You are a witty and conversational tech blogger crafting a tutorial on “{topic}.” Using up to 300 tokens, output only valid YAML front-matter fenced with triple dashes. Fill in each field thoughtfully—no placeholders. Also:
+- Suggest a `hero_image_prompt` for the article’s header.
+- Include a list field `inline_image_prompts` for images placed within sections.
+---
 title: ""
 meta_title: ""
 meta_desc: ""
 slug: ""
 keyphrase: ""
 synonyms: []
-image_prompt: ""
+categories: []
+tags: []
+hero_image_prompt: ""
+inline_image_prompts: []
 alt_text: ""
-body_html: |
-  [Your article content here]
-[Output ends here without any other text]
-
-Write an engaging, SEO-friendly article on “{topic}” in ~2,000 words. Structure naturally with an introduction, context, architecture deep-dive, use-case examples, and conclusion. Do NOT invent details you don’t know—leave values blank or as “TBD”. Use `<pre><code>…</code></pre>` for code samples, sprinkle 2–3 image captions.
-If you have a context-specific GitHub repository URL, use it in a bold call-to-action; if not, always link to my GitHub profile: https://github.com/felipedbene — do NOT output any placeholders like "TBD" or "Your Repo URL".
-Do not wrap any content in code fences and do not include any trailing notes or analysis sections in the article body.
+---
 """
-    models = ["deepseek-r1:14b","deepseek-r1:7b","mistral:7b-instruct", "llama3.2:latest"]
-    for model_name in models:
-        for attempt in range(3):
-            try:
-                print(f"🦙 Calling {model_name} (Ollama) for: {topic} (attempt {attempt + 1})")
-                response = requests.post(f"http://{OLLAMA_SERVER}/api/generate", json={
-                    "model": model_name,
-                    "prompt": prompt,
-                    "temperature": 0.9,
-                    "stream": False
-                }, timeout=600)
+    meta_resp = requests.post(
+        f"http://{OLLAMA_SERVER}/api/generate",
+        json={
+            "model": "llama3.2:latest",
+            "prompt": meta_prompt,
+            "temperature": 0.3,
+            "max_tokens": 300,
+            "stream": False,
+            "device": "cuda",
+        },
+        timeout=300
+    )
+    meta_data = meta_resp.json().get("response", "").strip()
+    # Start full_raw with metadata front matter
+    full_raw = meta_data + "\n"
+    # Initialize chaining context
+    context_accum = full_raw
 
-                if response.status_code != 200:
-                    print(f"❌ Ollama returned status {response.status_code}")
-                    print(f"Response body:\n{response.text}")
-                    response.raise_for_status()
-                # Parse JSON response
-                try:
-                    data = response.json()
-                except ValueError as e:
-                    print(f"❌ Ollama returned invalid JSON: {e}")
-                    print(f"Response body:\n{response.text}")
-                    raise Exception("Invalid JSON response from Ollama")
-                raw_response = data.get('response', '')
-                if not raw_response:
-                    print(f"⚠️ Empty response received from {model_name} for {topic}")
-                # Cache the raw response text
-                # with open(cache_path, "w") as f:
-                #     f.write(raw_response)
-                # Use raw_response for further processing
-                response_text = raw_response
+    # Generate outline and then expand each section
+    outline = generate_blog_outline(topic)
+    # Only keep the first three sections for deeper exploration
+    outline = outline[:3]
+    # For each section heading, generate its content
+    for section in outline:
+        section_prompt = f"""
+Write the next section titled “{section}” in a friendly, engaging style—imagine you’re explaining to a friend. Use smooth transitions, a bit of humor, and raise the bar on clarity. When it makes sense, insert image placeholders like [IMAGE: description of scene]. Only output the section content.
+"""
+        # Minimal feedback for section generation
+        print(f"🔨 Generating section: {section}")
+        sec_resp = requests.post(
+            f"http://{OLLAMA_SERVER}/api/generate",
+            json={
+                "model": "llama3.2:latest",
+                "prompt": section_prompt,
+                "temperature": 0.7,
+                "max_tokens": 1200,
+                "stream": False,
+                "device": "cuda",
+            },
+            timeout=600
+        )
+        sec_data = sec_resp.json()
+        section_text = sec_data.get("response", "").strip()
+        # Strip any nested YAML front-matter
+        section_text = _strip_frontmatter(section_text)
+        # Remove a repeated section heading if present as first line
+        lines = section_text.splitlines()
+        if lines and lines[0].strip().startswith(section):
+            section_text = "\n".join(lines[1:]).strip()
+        # Update chaining context with this section
+        context_accum += section_text + "\n"
+        # Append each section to full_raw (metadata remains at top)
+        full_raw += f"{section_text}\n"
+    # Post-process: expand the full article by ~10% for extra depth
+    try:
+        expansion_prompt = f"""
+Expand the following article by roughly 10%, adding deeper insights and details without repeating content:
 
-                # Extract YAML content starting at the title line
-                for line in response_text.splitlines():
-                    if comeco:
-                        content += line + "\n"
-                    elif line.startswith("title: "):
-                        comeco = True
-                        content += line + "\n"
-                return content
-            
-            except Exception as e:
-                wait = 2 ** attempt
-                print(f"⚠️ {model_name} call failed for '{topic}' (attempt {attempt + 1}) — retrying in {wait}s: {e}")
-                time.sleep(wait)
+{context_accum}
+"""
+        exp_resp = requests.post(
+            f"http://{OLLAMA_SERVER}/api/generate",
+            json={
+                "model": "llama3.2:latest",
+                "prompt": expansion_prompt,
+                "temperature": 0.7,
+                "max_tokens": 200,
+                "stream": False,
+                "device": "cuda",
+            },
+            timeout=120
+        )
+        expansion = exp_resp.json().get("response", "").strip()
+        expansion = _strip_frontmatter(expansion)
+        full_raw += "\n" + expansion + "\n"
+    except Exception as e:
+        print(f"⚠️ Expansion step failed: {e}")
+    # Write full_raw to cache and use as the response_text
+    with open(cache_path, "w") as f:
+        f.write(full_raw)
+    response_text = full_raw
 
-        print(f"⚡ Switching to fallback model after failures: {model_name}")
+    # The following streaming loop is disabled/commented out:
+    # models = ["deepseek-r1:32b"]
+    # for model_name in models:
+    #     for attempt in range(3):
+    #         try:
+    #             print(f"🦙 Calling {model_name} (Ollama) for: {topic} (attempt {attempt + 1})")
+    #             # Stream the generation in chunks to capture full output
+    #             response = requests.post(
+    #                 f"http://{OLLAMA_SERVER}/api/generate",
+    #                 json={
+    #                     "model": model_name,
+    #                     "prompt": prompt,
+    #                     "temperature": 0.7,
+    #                     "max_tokens": 2500,
+    #                     "stream": True
+    #                 },
+    #                 stream=True,
+    #                 timeout=600
+    #             )
+    #
+    #             raw_chunks = []
+    #             for line in response.iter_lines(decode_unicode=True):
+    #                 if not line:
+    #                     continue
+    #                 try:
+    #                     packet = json.loads(line)
+    #                     piece = packet.get("response", "")
+    #                     raw_chunks.append(piece)
+    #                 except Exception:
+    #                     continue
+    #             full_raw = "".join(raw_chunks)
+    #             if not full_raw:
+    #                 print(f"⚠️ Empty streamed response from {model_name} for {topic}")
+    #             # Cache the full streamed response
+    #             with open(cache_path, "w") as f:
+    #                 f.write(full_raw)
+    #             response_text = full_raw
+    #
+    #             # Extract YAML content starting at the title line
+    #             for line in response_text.splitlines():
+    #                 if comeco:
+    #                     content += line + "\n"
+    #                 elif line.startswith("title: "):
+    #                     comeco = True
+    #                     content += line + "\n"
+    #             return content
+    #         
+    #         except Exception as e:
+    #             wait = 2 ** attempt
+    #             print(f"⚠️ {model_name} call failed for '{topic}' (attempt {attempt + 1}) — retrying in {wait}s: {e}")
+    #             time.sleep(wait)
+    #
+    #     print(f"⚡ Switching to fallback model after failures: {model_name}")
+    #
+    # print(f"❌ Failed to generate blog for: {topic} after trying all models")
+    # return ""
 
-    print(f"❌ Failed to generate blog for: {topic} after trying all models")
-    return ""
+    # Return the full raw content (with [IMAGE: ...] placeholders intact)
+    return full_raw
 
 def generate_image(prompt):
 
@@ -207,7 +390,8 @@ def generate_image(prompt):
     base_prompt = prompt.strip()
     if not base_prompt.lower().startswith("a "):
         base_prompt = "A " + base_prompt
-    enhanced_prompt = base_prompt + ", digital art, trending on artstation, cinematic lighting, 4k resolution"
+    # Add “ultra-detailed, 8k” to the style descriptors
+    enhanced_prompt = base_prompt + ", digital art, ultra-detailed, 8k, cinematic lighting, trending on artstation"
     print(f"🎨 Final prompt sent to AUTOMATIC1111: {enhanced_prompt}")
     prompt = enhanced_prompt
     # ---------------------------------------------------------------
@@ -222,14 +406,26 @@ def generate_image(prompt):
 
     try:
         print(f"🖌️ Sending prompt to AUTOMATIC1111: {prompt}")
-        response = requests.post("http://127.0.0.1:7860/sdapi/v1/txt2img", json={
-            "prompt": prompt,
-            "width": 768,
-            "height": 512,
-            "steps": 20,
-            "cfg_scale": 7,
-            "sampler_name": "DPM++ 2M",
-        }, timeout=300)
+        response = requests.post(
+            f"{SD_API_BASE}/sdapi/v1/txt2img",
+            json={
+                # Core prompt
+                "prompt": prompt,
+                "negative_prompt": "blurry, lowres, artifacts, jpeg artifacts",
+                # Base resolution
+                "width": 800,
+                "height": 600,
+                "steps": 50,
+                "cfg_scale": 9.0,
+                "sampler_name": "DPM++ SDE Karras",
+                # High-res fix settings
+                "enable_hr": True,
+                "hr_scale": 2.0,
+                "hr_upscaler": "Latent",
+                "denoising_strength": 0.6,
+            },
+            timeout=600
+        )
         r = response.json()
         image_data = r['images'][0]
     except Exception as e:
@@ -250,7 +446,7 @@ def generate_image(prompt):
         print(f"⚠️ Failed to convert image to WebP, using PNG instead: {e}")
         return png_path
 
-def upload_page(title, slug, content, media_id=None, status="publish"):
+def upload_page(title, slug, content, media_id=None, status="publish", categories=None, tags=None, meta_desc=None):
     url = f"{WP_URL}/wp-json/wp/v2/pages"
     payload = {
         "title": title,
@@ -260,6 +456,12 @@ def upload_page(title, slug, content, media_id=None, status="publish"):
     }
     if media_id:
         payload["featured_media"] = media_id
+    if categories is not None:
+        payload["categories"] = categories
+    if tags is not None:
+        payload["tags"] = tags
+    if meta_desc is not None:
+        payload["excerpt"] = meta_desc
 
     r = requests.post(url, auth=(WP_USER, WP_PASS), json=payload)
     r.raise_for_status()
@@ -292,7 +494,7 @@ def upload_image_to_wp(image_path, alt_text):
                 time.sleep(wait_time)
         return media_id, media_url
 
-def upload_post(title, slug, content, meta_title, meta_desc, keyphrase, media_id, publish_date=None, publish_date_gmt=None, status="draft", post_id=None ):
+def upload_post(title, slug, content, meta_title, meta_desc, keyphrase, media_id, categories, tags, publish_date=None, publish_date_gmt=None, status="draft", post_id=None ):
     payload = {
         "title": title,
         "slug": slug,
@@ -300,8 +502,8 @@ def upload_post(title, slug, content, meta_title, meta_desc, keyphrase, media_id
         "content": content,
         "excerpt": meta_desc,
         "featured_media": media_id,
-        "categories": [6],  # Replace with real IDs
-        "tags": [12, 34]    # Replace with real IDs
+        "categories": categories,
+        "tags": tags
     }
     print(f"Payload: {payload}")
     if publish_date:
@@ -344,38 +546,75 @@ def update_seo_meta(post_id, meta_title, meta_desc, keyphrase):
 
 def parse_generated_text(raw: str) -> dict:
     """
-    Parse a Markdown document with YAML front-matter or plain metadata and render the body as HTML.
+    Parse a Markdown document with YAML front-matter and render the body as HTML.
     """
     import re
-    # Detect plain metadata without fences (raw begins with "title:")
-    if raw.lstrip().startswith("title:"):
-        # Split header and body on the literal 'body_html:' marker
-        parts = re.split(r'\nbody_html:\s*\|\s*', raw, maxsplit=1)
-        header_text = parts[0]
-        body_md = parts[1] if len(parts) > 1 else ""
-        # Parse metadata using YAML
-        try:
-            metadata = yaml.safe_load(header_text) or {}
-        except Exception:
-            metadata = {}
-        # Strip leading indentation on body lines
-        body_lines = [line.lstrip() for line in body_md.splitlines()]
-        md_content = "\n".join(body_lines)
-        # Render markdown to HTML
-        html_body = markdown.markdown(md_content, extensions=['extra','sane_lists']) if markdown else md_content
-        data = metadata.copy()
-        data['body_html'] = html_body
-        print(f"📄 Parsed data from plain metadata: {data}")
-        return data
+    # Remove any internal reasoning blocks
+    raw_clean = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL)
 
-    # Otherwise, assume proper front-matter fences and use frontmatter.loads
-    post = frontmatter.loads(raw)
-    metadata = getattr(post, 'metadata', {}) or {}
-    content_md = getattr(post, 'content', '') or ""
-    html_body = markdown.markdown(content_md, extensions=['extra','sane_lists']) if markdown else content_md
+    # Normalize front-matter fences: ensure exactly two '---' fences, inserting closing fence if missing.
+    lines = raw_clean.splitlines()
+    # Identify lines that are just '---'
+    fence_indices = [i for i, line in enumerate(lines) if line.strip() == '---']
+    if lines and lines[0].strip() == '---':
+        if len(fence_indices) >= 2:
+            # Already has opening and closing fences: do nothing
+            pass
+        else:
+            # Missing closing fence: find end of metadata (first non-YAML line)
+            insert_idx = len(lines)
+            for i in range(1, len(lines)):
+                # YAML metadata lines start with "key:" or list items "- "
+                if not re.match(r'\s*(\w[\w_-]*):', lines[i]) and not re.match(r'\s*-\s+', lines[i]):
+                    insert_idx = i
+                    break
+            # Insert closing fence before content
+            lines.insert(insert_idx, '---')
+            raw_clean = "\n".join(lines)
+
+    # Use frontmatter to parse fenced YAML and content
+    try:
+        post = frontmatter.loads(raw_clean)
+    except Exception as e:
+        print(f"⚠️ Front-matter parse failed: {e}, falling back to manual parsing")
+        # Manual YAML front-matter extraction
+        fm_pattern = r'^---\s*\n(.*?)\n---'
+        m = re.search(fm_pattern, raw_clean, flags=re.DOTALL)
+        if m:
+            fm_raw = m.group(1)
+            metadata = {}
+            for line in fm_raw.splitlines():
+                if ':' in line:
+                    k, v = line.split(':', 1)
+                    metadata[k.strip()] = v.strip().strip('"')
+            content_md = raw_clean[m.end():]
+        else:
+            metadata = {}
+            content_md = raw_clean
+        # Build a simple post-like object for downstream code
+        class FallbackPost: pass
+        post = FallbackPost()
+        post.metadata = metadata
+        post.content = content_md
+
+    metadata = post.metadata or {}
+    content_md = post.content or ""
+
+    # Render markdown to HTML with fenced_code, codehilite, and attr_list for Prism.js compatibility
+    html_body = markdown.markdown(
+        content_md,
+        extensions=[
+            'markdown.extensions.extra',
+            'markdown.extensions.sane_lists',
+            FencedCodeExtension(),
+            CodeHiliteExtension(guess_lang=False, css_class='language-'),
+            'markdown.extensions.attr_list'
+        ]
+    ) if markdown else content_md
+
     data = metadata.copy()
     data['body_html'] = html_body
-    print(f"📄 Parsed data from fenced frontmatter: {data}")
+    print(f"📄 Parsed data via frontmatter: {data}")
     return data
 
 # --- Front matter rendering helper ---
@@ -493,6 +732,11 @@ def extract_image_prompts_from_body(html: str) -> list[str]:
         caption = match.group(1).strip()
         if caption and caption not in prompts:
             prompts.append(caption)
+    # Match [IMAGE: description] placeholders
+    for match in re.finditer(r'\[IMAGE:\s*(.*?)\]', html, re.IGNORECASE):
+        caption = match.group(1).strip()
+        if caption and caption not in prompts:
+            prompts.append(caption)
     return prompts
 
 # --- Helper: Inject inline images for figcaptions ---
@@ -501,7 +745,7 @@ import re
 def inject_inline_images(html: str, prompts: list[str], alt_text: str) -> str:
     """
     For each caption prompt, generate an image, upload it, and wrap the existing <figcaption>
-    in a <figure> with the new <img>.
+    in a <figure> with the new <img>. Also replaces [IMAGE: description] placeholders.
     """
     for prompt in prompts:
         img_path = generate_image(prompt)
@@ -510,6 +754,18 @@ def inject_inline_images(html: str, prompts: list[str], alt_text: str) -> str:
         pattern = fr'(<figcaption>\s*{re.escape(prompt)}\s*</figcaption>)'
         replacement = rf'<figure><img src="{url}" alt="{alt_text}"/>\1</figure>'
         html = re.sub(pattern, replacement, html, flags=re.IGNORECASE)
+    # Replace any leftover [IMAGE: description] placeholders
+    for prompt in prompts:
+        img_path = generate_image(prompt)
+        mid, url = upload_image_to_wp(img_path, alt_text)
+        replacement = (
+            f'<figure>'
+            f'<img src="{url}" alt="{alt_text}"/>'
+            f'<figcaption>{prompt}</figcaption>'
+            f'</figure>'
+        )
+        placeholder_pattern = rf'\[IMAGE:\s*{re.escape(prompt)}\s*\]'
+        html = re.sub(placeholder_pattern, replacement, html, flags=re.IGNORECASE)
     return html
 
 def enrich_with_internal_links(parsed_body, all_posts):
@@ -549,12 +805,60 @@ def enrich_with_internal_links(parsed_body, all_posts):
     else:
         return parsed_body
 
-def fetch_trending_topics(count=5):
-    api_key = GNEWS_API_KEY
-    url = f"https://gnews.io/api/v4/top-headlines?token={api_key}&lang=en&max={count}"
-    res = requests.get(url)
-    articles = res.json().get("articles", [])
-    return [article["title"] for article in articles]
+def fetch_trending_topics(count=5, category="technology", query=None):
+    """
+    Fetch trending topics using NewsAPI.org API only.
+    """
+    import os
+    import requests
+
+    newsapi_key = os.getenv("NEWSAPI_KEY")
+    if not newsapi_key:
+        print("❌ NEWSAPI_KEY is not set in environment.")
+        return []
+
+    topics = []
+    # Determine endpoint and parameters
+    if query:
+        url = "https://newsapi.org/v2/everything"
+        params = {
+            "apiKey": newsapi_key,
+            "q": query,
+            "language": "en",
+            "sortBy": "popularity",
+            "pageSize": count,
+        }
+    else:
+        url = "https://newsapi.org/v2/top-headlines"
+        params = {
+            "apiKey": newsapi_key,
+            "country": "us",
+            "category": category,
+            "pageSize": count,
+        }
+
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        articles = data.get("articles", [])
+        if not articles:
+            print("⚠️ No articles returned from NewsAPI.org.")
+            return []
+
+        for article in articles:
+            title = (article.get("title") or "").strip()
+            description = (article.get("description") or "").strip()
+            parts = [title]
+            if description:
+                parts.append(description)
+            enriched = " | ".join(parts)
+            topics.append(enriched)
+
+        return topics
+    except Exception as e:
+        print(f"❌ Failed to fetch trending topics from NewsAPI.org: {e}")
+        return []
 
 def fetch_all_posts_metadata():
     results = []
@@ -602,76 +906,72 @@ def process_and_publish(idea, keyphrase, args):
     Generate, process, and publish a post or page from the given idea and keyphrase.
     Returns the published link.
     """
-    # Try loading cache
-    cached = load_cached_post(idea, keyphrase)
-    if cached:
-        print(f"💾 Using pre-existing cached content for: {idea}")
-        raw = cached
-        parsed = parse_generated_text(raw)
-        # Retry generation if critical fields are missing or contain placeholders
-        max_retries = 5
-        retries = 0
-        while (not parsed.get("title") or not parsed.get("body_html") or parsed.get("body_html", "").startswith("[Your article content here]")) and retries < max_retries:
-            print(f"⚠️ Incomplete parse detected (title or body missing). Regenerating attempt {retries+1}...")
-            raw = generate_blog_components(idea)
-            parsed = parse_generated_text(raw)
-            retries += 1
-        if not parsed.get("title") or not parsed.get("body_html") or parsed.get("body_html", "").startswith("[Your article content here]"):
-            raise Exception("❌ Failed to generate valid content after retries.")
-    else:
-        raw = generate_blog_components(idea)
-        parsed = parse_generated_text(raw)
-        # Retry generation if critical fields are missing or contain placeholders
-        max_retries = 5
-        retries = 0
-        while (not parsed.get("title") or not parsed.get("body_html") or parsed.get("body_html", "").startswith("[Your article content here]")) and retries < max_retries:
-            print(f"⚠️ Incomplete parse detected (title or body missing). Regenerating attempt {retries+1}...")
-            raw = generate_blog_components(idea)
-            parsed = parse_generated_text(raw)
-            retries += 1
-        if not parsed.get("title") or not parsed.get("body_html") or parsed.get("body_html", "").startswith("[Your article content here]"):
-            raise Exception("❌ Failed to generate valid content after retries.")
+    # Always generate fresh content and parse it directly
+    raw = generate_blog_components(idea)
+    parsed = parse_generated_text(raw)
 
-    # Build title, slug, etc.
-    title = parsed["title"]
-    slug = parsed["slug"].lower().replace(" ", "-")
-    keyphrase_final = parsed["keyphrase"] or keyphrase
-    meta_title = parsed["meta_title"][:60]
-    meta_desc = parsed["meta_desc"][:155]
+    # Fallback if title/slug/keyphrase missing in parsed metadata
+    title = parsed.get("title") or idea
+    slug_source = parsed.get("slug") or title
+    slug = slug_source.lower().replace(" ", "-")
+    keyphrase_final = parsed.get("keyphrase") or keyphrase
+
+    # Safe fallback for meta_title and meta_desc
+    raw_meta_title = parsed.get("meta_title") or title
+    meta_title = raw_meta_title[:60]
+
+    raw_meta_desc = parsed.get("meta_desc") or (parsed.get("body_html", "")[:155] if "body_html" in parsed else "")
+    # If still empty, fallback to content below after it's set
+    meta_desc = raw_meta_desc[:155]
+
     synonyms = parsed.get("synonyms", [])
-    image_prompt = parsed["image_prompt"] or title
+    image_prompt = parsed.get("image_prompt") or title
     alt_text = parsed.get("alt_text", "")
     # Use only the clean HTML body as content
-    content = parsed["body_html"].lstrip("|").lstrip()
+    content = parsed.get("body_html", "").lstrip("|").lstrip()
+
+    # Summary generation disabled until body parsing is fixed
+    # try:
+    #     summary_sentence = generate_summary(content)
+    #     content = f"<p><em>{summary_sentence}</em></p>\n" + content
+    # except Exception as e:
+    #     print(f"⚠️ Summary generation failed: {e}")
 
     # Fetch all post metadata for internal linking
     all_posts = fetch_all_posts_metadata()
     # Inject AdSense snippet before internal links
     content = inject_adsense_snippet(content)
-    content = enrich_with_internal_links(content, all_posts)
+    #content = enrich_with_internal_links(content, all_posts)
 
-    # --- Generate and upload images based on detected captions ---
-    prompts = extract_image_prompts_from_body(content)
-    if prompts:
-        # Inline images for any LLM-generated figcaptions
-        content = inject_inline_images(content, prompts, alt_text)
-        media_id = None
-    else:
-        media_id = None
-        # Only add a contextual image if none exists already
-        if '<img ' not in content:
-            print(f"🎨 Generating contextual image...")
-            img_path = generate_image(image_prompt)
-            mid, url = upload_image_to_wp(img_path, alt_text)
-            # Do not prepend the image to the content
-            media_id = mid
+    # (Image injection is now handled after all cleanup below)
 
     # Final HTML transformations on full content
-    # (Do all markdown/list/inline parsing after image insertion)
-    if markdown:
-        content = markdown.markdown(content, extensions=['extra', 'sane_lists'])
+    # Skip markdown-to-HTML conversion since content is already HTML
     content = auto_convert_lists(content)
     content = convert_markdown_inline(content)
+
+    # Append a call-to-action to excite readers
+    cta_html = (
+        '<p><strong>Ready to dive deeper?</strong> '
+        'Check out <a href="https://github.com/felipedbene" target="_blank">my GitHub</a> '
+        'for more code examples and in-depth tutorials!</p>'
+    )
+    content += "\n" + cta_html
+
+    # --- Remove any trailing key: value lines after content ---
+    content = re.sub(r'(\n[a-z_]+:.*)+$', '', content, flags=re.MULTILINE).strip()
+
+    # --- Inline image injection and featured-image logic ---
+    prompts = extract_image_prompts_from_body(content)
+    if prompts:
+        content = inject_inline_images(content, prompts, alt_text)
+
+    # If there are no images in the body at all, generate a featured image
+    media_id = None
+    if '<img ' not in content:
+        print("🎨 Generating contextual image…")
+        img_path = generate_image(image_prompt)
+        media_id, _ = upload_image_to_wp(img_path, alt_text)
 
     # Determine randomized publish date if requested
     pub_date = pub_date_gmt = None
@@ -685,6 +985,28 @@ def process_and_publish(idea, keyphrase, args):
     else:
         status = "draft"
 
+    # Normalize AI-generated taxonomy lists to flat lists of strings
+    raw_categories = parsed.get("categories", []) or ["default-category"]
+    category_names = []
+    for item in raw_categories:
+        if isinstance(item, list):
+            for sub in item:
+                category_names.append(str(sub))
+        else:
+            category_names.append(str(item))
+
+    raw_tags = parsed.get("tags", []) or [keyphrase]
+    tag_names = []
+    for item in raw_tags:
+        if isinstance(item, list):
+            for sub in item:
+                tag_names.append(str(sub))
+        else:
+            tag_names.append(str(item))
+
+    category_ids = get_term_ids(category_names, "categories")
+    tag_ids = get_term_ids(tag_names, "tags")
+
     # Upload as page or post based on flag
     print(f"📝 Uploading {'page' if args.page else 'post'} to WordPress...")
     if args.page:
@@ -692,12 +1014,18 @@ def process_and_publish(idea, keyphrase, args):
             result = upload_page(
                 title, slug, content,
                 media_id=media_id,
-                status=status
+                status=status,
+                categories=category_ids,
+                tags=tag_ids,
+                meta_desc=meta_desc
             )
         else:
             result = upload_page(
                 title, slug, content,
-                status=status
+                status=status,
+                categories=category_ids,
+                tags=tag_ids,
+                meta_desc=meta_desc
             )
         post_link = result.get('link')
     else:
@@ -706,6 +1034,7 @@ def process_and_publish(idea, keyphrase, args):
                 title, slug, content,
                 meta_title, meta_desc,
                 keyphrase_final, media_id,
+                category_ids, tag_ids,
                 publish_date=pub_date,
                 publish_date_gmt=pub_date_gmt,
                 status=status
@@ -715,6 +1044,7 @@ def process_and_publish(idea, keyphrase, args):
                 title, slug, content,
                 meta_title, meta_desc,
                 keyphrase_final, None,
+                category_ids, tag_ids,
                 publish_date=pub_date,
                 publish_date_gmt=pub_date_gmt,
                 status=status
@@ -728,13 +1058,15 @@ def process_and_publish(idea, keyphrase, args):
 # Main function
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--gnews', action='store_true', help='Fetch trending topics from GNews')
+    parser.add_argument('--news', action='store_true', help='Fetch trending topics from News API')
     parser.add_argument('--interval', type=int, default=900, help='Interval in seconds between fetches (default 900s)')
     parser.add_argument('--days', type=int, default=0, help='Range of past days for randomized publication date')
     parser.add_argument('--page', action='store_true', help='Create pages instead of posts')
     parser.add_argument('--scan-broken', action='store_true', help='Scan internal post links for 404s and write to broken_pages.txt')
     parser.add_argument('--idea', type=str, help='Provide a manual idea for a blog post')
     parser.add_argument('--keyphrase', type=str, help='Optional keyphrase to pass for the post')
+    parser.add_argument('--query', type=str, help='Optional search query for News API')
+    parser.add_argument('--category', type=str, default="general", help='Optional category for News API trending topics')
     args, unknown = parser.parse_known_args()
 
     logging.basicConfig(
@@ -747,28 +1079,17 @@ def main():
     )
 
     tasks = []
-    if args.gnews:
-        logging.info("📥 Fetching new trending topics from GNews...")
-        all_trends = fetch_trending_topics(count=10)
+    if args.news:
+        logging.info("📥 Fetching new trending topics from News API...")
+        all_trends = fetch_trending_topics(count=10, category=args.category, query=args.query)
         logging.info(f"🌐 Retrieved {len(all_trends)} headlines.")
-        # Redis deduplication
-        r = redis.Redis(
-            host=REDIS_HOST,
-            port=6379,
-            password=REDIS_PASSWORD,
-            decode_responses=True
-        )
+        # Add all trends without Redis deduplication
         for trend in all_trends:
-            trend_key = f"trend:{hashlib.sha1(trend.encode()).hexdigest()}"
-            if r.exists(trend_key):
-                logging.info(f"⏩ Skipping already-processed trend: {trend}")
-                continue
-            r.setex(trend_key, 86400, "seen")  # 24h TTL
             tasks.append((trend, "default-keyphrase"))
     elif args.idea:
-        tasks.append((args.idea, args.keyphrase or "default-keyphrase"))
+        tasks.append((args.idea, args.keyphrase))
     else:
-        parser.error("You must provide --idea or --gnews")
+        parser.error("You must provide --idea or --news")
 
     for idea, keyphrase in tasks:
         link = process_and_publish(idea, keyphrase, args)
