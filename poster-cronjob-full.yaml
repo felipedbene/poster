@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: poster
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: poster-cronjob
+  namespace: poster
+spec:
+  schedule: "0 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: poster
+              image: ghcr.io/felipedbene/poster:latest
+              imagePullPolicy: IfNotPresent
+          restartPolicy: OnFailure

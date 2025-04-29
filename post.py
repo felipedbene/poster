@@ -139,34 +139,20 @@ OPENAI_KEY = os.getenv("OPENAI_API_KEY")
 # Ollama server address (env var): host:port for local or remote Ollama
 OLLAMA_SERVER = os.getenv("OLLAMA_SERVER", "localhost:11434")
 
-# Redis config
-REDIS_HOST = os.getenv("REDIS_HOST", "redis-master.wp.svc.cluster.local")
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
 
-# Grouped environment variable validation
-REQUIRED_CREDENTIALS = {
+# Required environment variables (no Redis)
+required_env = {
     "WORDPRESS_USERNAME": WP_USER,
     "WORDPRESS_APP_PASSWORD": WP_PASS,
-    "WORDPRESS_URL": WP_URL
+    "WORDPRESS_URL": WP_URL,
+    "HC_APIKEY": HC_APIKEY,
+    "SD_API_URL": SD_API_BASE,
+    "OLLAMA_SERVER": OLLAMA_SERVER,
+    "NEWSAPI_KEY": os.getenv("NEWSAPI_KEY"),
 }
-
-REQUIRED_API_KEYS = {
-    "OPENAI_API_KEY": OPENAI_KEY,
-    "NEWS_API": os.getenv("NEWS_API")
-}
-
-missing_creds = [key for key, value in REQUIRED_CREDENTIALS.items() if not value]
-missing_keys = [key for key, value in REQUIRED_API_KEYS.items() if not value]
-
-if missing_creds or missing_keys:
-    problems = []
-    if missing_creds:
-        problems.append(f"Missing credentials: {', '.join(missing_creds)}")
-    if missing_keys:
-        problems.append(f"Missing API keys: {', '.join(missing_keys)}")
-    raise EnvironmentError("❌ " + " | ".join(problems))
-
-NEWS_API = REQUIRED_API_KEYS["NEWS_API"]
+missing = [key for key, val in required_env.items() if not val]
+if missing:
+    raise EnvironmentError(f"❌ Missing environment variables: {', '.join(missing)}")
 
 #openai.api_key = OPENAI_KEY
 

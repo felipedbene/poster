@@ -7,4 +7,4 @@
 __pycache__/
 .cache/
 # ignore all our test files
-*.poster-job.yml
+*poster.yml
