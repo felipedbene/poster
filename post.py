@@ -125,7 +125,6 @@ except ImportError:
 # Load .env
 load_dotenv()
 
-# Load actual environment variables after .env is loaded
 WP_USER = os.getenv("WORDPRESS_USERNAME")
 WP_PASS = os.getenv("WORDPRESS_APP_PASSWORD")
 WP_URL  = os.getenv("WORDPRESS_URL")
@@ -134,7 +133,7 @@ SD_API_BASE   = os.getenv("SD_API_URL")
 OLLAMA_SERVER = os.getenv("OLLAMA_SERVER")
 NEWSAPI_KEY   = os.getenv("NEWSAPI_KEY")
 
-# Ensure only the actual environment variables are present
+# Only validate required environment variables for this script
 required_env = {
     "WORDPRESS_USERNAME": WP_USER,
     "WORDPRESS_APP_PASSWORD": WP_PASS,
