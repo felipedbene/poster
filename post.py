@@ -294,12 +294,15 @@ Expand the following article by roughly 10%, adding deeper insights and details 
 
 def generate_image(prompt):
 
-    # --- Clean up and enhance the prompt for better image quality ---
+    # --- Clean up and enhance the prompt for cartoon-style rendering ---
     base_prompt = prompt.strip()
     if not base_prompt.lower().startswith("a "):
         base_prompt = "A " + base_prompt
-    # Add “ultra-detailed, 8k” to the style descriptors
-    enhanced_prompt = base_prompt + ", digital art, ultra-detailed, 8k, cinematic lighting, trending on artstation"
+    # Cartoonify: use cel-shading, bold outlines, and vibrant palette
+    enhanced_prompt = (
+        base_prompt
+        + ", cartoon style, cel-shading, bold outlines, vibrant colors, stylized 3D illustration"
+    )
     print(f"🎨 Final prompt sent to AUTOMATIC1111: {enhanced_prompt}")
     prompt = enhanced_prompt
     # ---------------------------------------------------------------
