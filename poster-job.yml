@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: poster
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: poster-env
+  namespace: poster
+type: Opaque
+stringData:
+  WORDPRESS_USERNAME: "deepseek"
+  WORDPRESS_APP_PASSWORD: "AAMj9EXFS41OIT1TsAxgfhE4"
+  WORDPRESS_URL: "https://debene.dev"
+  GNEWS_API_KEY: "43ac168abd4469d41aa227b9e855f32f"
+  OPENAI_API_KEY: "REMOVED"
+  REDIS_PASSWORD: "SQQEYnCjYr"
+  HC_APIKEY: "b6d51ccc-3470-479d-8ba9-a793f65ad02b"
+  SD_API_URL: "http://10.0.10.105:7860"
+  OLLAMA_SERVER: "10.0.10.105:11434"
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: poster-cron
+  namespace: poster
+spec:
+  schedule: "0 */2 * * *"        # at minute 0, every 2 hours
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: poster
+            image: <YOUR_REGISTRY>/poster:latest
+            imagePullPolicy: IfNotPresent
+            envFrom:
+            - secretRef:
+                name: poster-env
+            args:
+            - --news
+            - --category=technology
