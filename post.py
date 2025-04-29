@@ -124,23 +124,17 @@ except ImportError:
 
 # Load .env
 load_dotenv()
-# Load SD_API_URL after .env is loaded
-SD_API_BASE = os.getenv("SD_API_URL", "http://127.0.0.1:7860")
 
-# Healthcheck API key (optional)
-HC_APIKEY = os.getenv("HC_APIKEY")
-
-# Config
+# Load actual environment variables after .env is loaded
 WP_USER = os.getenv("WORDPRESS_USERNAME")
 WP_PASS = os.getenv("WORDPRESS_APP_PASSWORD")
-WP_URL = os.getenv("WORDPRESS_URL")
+WP_URL  = os.getenv("WORDPRESS_URL")
+HC_APIKEY     = os.getenv("HC_APIKEY")
+SD_API_BASE   = os.getenv("SD_API_URL")
+OLLAMA_SERVER = os.getenv("OLLAMA_SERVER")
+NEWSAPI_KEY   = os.getenv("NEWSAPI_KEY")
 
-OPENAI_KEY = os.getenv("OPENAI_API_KEY")
-# Ollama server address (env var): host:port for local or remote Ollama
-OLLAMA_SERVER = os.getenv("OLLAMA_SERVER", "localhost:11434")
-
-
-# Required environment variables (no Redis)
+# Ensure only the actual environment variables are present
 required_env = {
     "WORDPRESS_USERNAME": WP_USER,
     "WORDPRESS_APP_PASSWORD": WP_PASS,
@@ -148,13 +142,11 @@ required_env = {
     "HC_APIKEY": HC_APIKEY,
     "SD_API_URL": SD_API_BASE,
     "OLLAMA_SERVER": OLLAMA_SERVER,
-    "NEWSAPI_KEY": os.getenv("NEWSAPI_KEY"),
+    "NEWSAPI_KEY": NEWSAPI_KEY,
 }
-missing = [key for key, val in required_env.items() if not val]
+missing = [k for k, v in required_env.items() if not v]
 if missing:
     raise EnvironmentError(f"❌ Missing environment variables: {', '.join(missing)}")
-
-#openai.api_key = OPENAI_KEY
 
 
 
