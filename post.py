@@ -1,5 +1,22 @@
+import os
+import sys
+import argparse
+import requests
+import hashlib
+import json
+import datetime
+import random
+import re
+import logging
+import time
+from dotenv import load_dotenv
 from markdown.extensions.fenced_code import FencedCodeExtension
 from markdown.extensions.codehilite import CodeHiliteExtension
+import yaml
+import frontmatter
+from PIL import Image
+from io import BytesIO
+import base64
 
 # --- Helper: Fetch or create taxonomy terms by name ---
 def get_term_ids(names: list[str], taxonomy: str) -> list[int]:
@@ -53,15 +70,6 @@ def convert_markdown_inline(html: str) -> str:
     # links
     html = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', html)
     return html
-#!/usr/bin/env python3
-import os
-import argparse
-import requests
-import hashlib
-import json
-import datetime
-import random
-import re
 
 # --- Helper: Strip front-matter fences and nested headings ---
 def _strip_frontmatter(text: str) -> str:
@@ -69,15 +77,6 @@ def _strip_frontmatter(text: str) -> str:
     # Remove any top-level YAML fences
     text = re.sub(r'(?s)^---.*?---\s*', '', text)
     return text
-from dotenv import load_dotenv
-from PIL import Image
-from io import BytesIO
-import base64
-import logging
-import time
-import sys
-import yaml
-import frontmatter
 
 # --- Helper: Generate a detailed outline for a blog topic using LLM ---
 def generate_blog_outline(topic):
@@ -116,30 +115,6 @@ Limit the JSON array to exactly 3 section headings.
         print(f"⚠️ Failed to parse outline JSON: {e}")
         return []
 
-# --- Helper: Generate a one-sentence summary of HTML content via LLM ---
-def generate_summary(html_content: str) -> str:
-    """
-    Generate a one-sentence summary of the given HTML content via LLM.
-    """
-    summary_prompt = f""" 
-You have up to 100 tokens—summarize the following article in one concise sentence:
-\"\"\"{html_content[:1000]}...\"\"\"
-Only output the summary sentence.
-"""
-    resp = requests.post(
-        f"http://{OLLAMA_SERVER}/api/generate",
-        json={
-            "model": "llama3.2:latest",
-            "prompt": summary_prompt,
-            "temperature": 0.7,
-            "max_tokens": 100,
-            "stream": False,
-            "device": "cuda",
-        },
-        timeout=120
-    )
-    data = resp.json()
-    return data.get("response", "").strip()
 
 try:
     import markdown
@@ -195,16 +170,6 @@ NEWS_API = REQUIRED_API_KEYS["NEWS_API"]
 
 #openai.api_key = OPENAI_KEY
 
-def load_cached_post(idea, keyphrase):
-    cache_key = hashlib.sha256(f"{idea}:{keyphrase}".encode()).hexdigest()
-    cache_path = f".cache/posts/{cache_key}.yaml"
-    if not os.path.exists(cache_path):
-        return None
-    with open(cache_path, "r") as f:
-        cached = f.read()
-    if "IMAGE_PROMPT:" not in cached:
-        return None
-    return cached
 
 
 def generate_blog_components(topic):
@@ -323,63 +288,6 @@ Expand the following article by roughly 10%, adding deeper insights and details 
     with open(cache_path, "w") as f:
         f.write(full_raw)
     response_text = full_raw
-
-    # The following streaming loop is disabled/commented out:
-    # models = ["deepseek-r1:32b"]
-    # for model_name in models:
-    #     for attempt in range(3):
-    #         try:
-    #             print(f"🦙 Calling {model_name} (Ollama) for: {topic} (attempt {attempt + 1})")
-    #             # Stream the generation in chunks to capture full output
-    #             response = requests.post(
-    #                 f"http://{OLLAMA_SERVER}/api/generate",
-    #                 json={
-    #                     "model": model_name,
-    #                     "prompt": prompt,
-    #                     "temperature": 0.7,
-    #                     "max_tokens": 2500,
-    #                     "stream": True
-    #                 },
-    #                 stream=True,
-    #                 timeout=600
-    #             )
-    #
-    #             raw_chunks = []
-    #             for line in response.iter_lines(decode_unicode=True):
-    #                 if not line:
-    #                     continue
-    #                 try:
-    #                     packet = json.loads(line)
-    #                     piece = packet.get("response", "")
-    #                     raw_chunks.append(piece)
-    #                 except Exception:
-    #                     continue
-    #             full_raw = "".join(raw_chunks)
-    #             if not full_raw:
-    #                 print(f"⚠️ Empty streamed response from {model_name} for {topic}")
-    #             # Cache the full streamed response
-    #             with open(cache_path, "w") as f:
-    #                 f.write(full_raw)
-    #             response_text = full_raw
-    #
-    #             # Extract YAML content starting at the title line
-    #             for line in response_text.splitlines():
-    #                 if comeco:
-    #                     content += line + "\n"
-    #                 elif line.startswith("title: "):
-    #                     comeco = True
-    #                     content += line + "\n"
-    #             return content
-    #         
-    #         except Exception as e:
-    #             wait = 2 ** attempt
-    #             print(f"⚠️ {model_name} call failed for '{topic}' (attempt {attempt + 1}) — retrying in {wait}s: {e}")
-    #             time.sleep(wait)
-    #
-    #     print(f"⚡ Switching to fallback model after failures: {model_name}")
-    #
-    # print(f"❌ Failed to generate blog for: {topic} after trying all models")
-    # return ""
 
     # Return the full raw content (with [IMAGE: ...] placeholders intact)
     return full_raw
@@ -809,9 +717,6 @@ def fetch_trending_topics(count=5, category="technology", query=None):
     """
     Fetch trending topics using NewsAPI.org API only.
     """
-    import os
-    import requests
-
     newsapi_key = os.getenv("NEWSAPI_KEY")
     if not newsapi_key:
         print("❌ NEWSAPI_KEY is not set in environment.")
@@ -1059,10 +964,8 @@ def process_and_publish(idea, keyphrase, args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--news', action='store_true', help='Fetch trending topics from News API')
-    parser.add_argument('--interval', type=int, default=900, help='Interval in seconds between fetches (default 900s)')
     parser.add_argument('--days', type=int, default=0, help='Range of past days for randomized publication date')
     parser.add_argument('--page', action='store_true', help='Create pages instead of posts')
-    parser.add_argument('--scan-broken', action='store_true', help='Scan internal post links for 404s and write to broken_pages.txt')
     parser.add_argument('--idea', type=str, help='Provide a manual idea for a blog post')
     parser.add_argument('--keyphrase', type=str, help='Optional keyphrase to pass for the post')
     parser.add_argument('--query', type=str, help='Optional search query for News API')
@@ -1099,7 +1002,6 @@ def main():
     send_healthcheck_ping()
     logging.info("📡 Healthcheck ping execution finished.")
 
-# TODO: Implement internal link enrichment — scan past posts and inject semantic internal links into parsed['body'] based on relevance
 
 if __name__ == '__main__':
     main()
