@@ -449,6 +449,14 @@ def parse_generated_text(text: str) -> Tuple[Dict, str]:
             # Safely parse YAML front-matter
             fm = yaml.safe_load(fm_text)
             if isinstance(fm, dict):
+                # Normalize list fields if returned as JSON-formatted strings
+                for list_field in ("categories", "tags", "synonyms", "inline_image_prompts"):
+                    val = fm.get(list_field)
+                    if isinstance(val, str):
+                        try:
+                            fm[list_field] = json.loads(val)
+                        except Exception:
+                            pass
                 front_matter = fm
                 body = text[match.end():]
         except yaml.YAMLError:
