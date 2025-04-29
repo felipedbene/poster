@@ -25,23 +25,17 @@ stringData:
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: poster-cron
-  namespace: poster
+  name: poster-job
 spec:
-  schedule: "0 */2 * * *"        # at minute 0, every 2 hours
-  concurrencyPolicy: Forbid
+  schedule: "0 * * * *"
   jobTemplate:
     spec:
       template:
         spec:
-          restartPolicy: OnFailure
           containers:
           - name: poster
-            image: ghcr.io/felipedbene/poster:latest
-            imagePullPolicy: IfNotPresent
+            image: poster-image:latest
             envFrom:
             - secretRef:
                 name: poster-env
-            args:
-            - --news
-            - --category=technology
+          restartPolicy: OnFailure
