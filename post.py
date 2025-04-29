@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from markdown.extensions.fenced_code import FencedCodeExtension
 from markdown.extensions.codehilite import CodeHiliteExtension
 import yaml
+from typing import Tuple, Dict
 import frontmatter
 from PIL import Image
 from io import BytesIO
@@ -432,78 +433,29 @@ def update_seo_meta(post_id, meta_title, meta_desc, keyphrase):
     else:
         print("⚠️ Failed to update SEO meta:", r.text)
 
-def parse_generated_text(raw: str) -> dict:
+def parse_generated_text(text: str) -> Tuple[Dict, str]:
     """
-    Parse a Markdown document with YAML front-matter and render the body as HTML.
+    Extract YAML front-matter (between '---' markers) if valid, else skip it.
+    Returns a tuple of (front_matter_dict, body_text).
     """
-    import re
-    # Remove any internal reasoning blocks
-    raw_clean = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL)
+    front_matter: Dict = {}
+    body = text
 
-    # Normalize front-matter fences: ensure exactly two '---' fences, inserting closing fence if missing.
-    lines = raw_clean.splitlines()
-    # Identify lines that are just '---'
-    fence_indices = [i for i, line in enumerate(lines) if line.strip() == '---']
-    if lines and lines[0].strip() == '---':
-        if len(fence_indices) >= 2:
-            # Already has opening and closing fences: do nothing
-            pass
-        else:
-            # Missing closing fence: find end of metadata (first non-YAML line)
-            insert_idx = len(lines)
-            for i in range(1, len(lines)):
-                # YAML metadata lines start with "key:" or list items "- "
-                if not re.match(r'\s*(\w[\w_-]*):', lines[i]) and not re.match(r'\s*-\s+', lines[i]):
-                    insert_idx = i
-                    break
-            # Insert closing fence before content
-            lines.insert(insert_idx, '---')
-            raw_clean = "\n".join(lines)
+    # Regex to find front-matter at the very top
+    match = re.match(r'^---\s*\n(.*?)\n---\s*\n?', text, flags=re.S)
+    if match:
+        fm_text = match.group(1)
+        try:
+            # Safely parse YAML front-matter
+            fm = yaml.safe_load(fm_text)
+            if isinstance(fm, dict):
+                front_matter = fm
+                body = text[match.end():]
+        except yaml.YAMLError:
+            logging.warning("⚠️ Front-matter parse failed, skipping it")
+            # Skip front-matter entirely if invalid
 
-    # Use frontmatter to parse fenced YAML and content
-    try:
-        post = frontmatter.loads(raw_clean)
-    except Exception as e:
-        print(f"⚠️ Front-matter parse failed: {e}, falling back to manual parsing")
-        # Manual YAML front-matter extraction
-        fm_pattern = r'^---\s*\n(.*?)\n---'
-        m = re.search(fm_pattern, raw_clean, flags=re.DOTALL)
-        if m:
-            fm_raw = m.group(1)
-            metadata = {}
-            for line in fm_raw.splitlines():
-                if ':' in line:
-                    k, v = line.split(':', 1)
-                    metadata[k.strip()] = v.strip().strip('"')
-            content_md = raw_clean[m.end():]
-        else:
-            metadata = {}
-            content_md = raw_clean
-        # Build a simple post-like object for downstream code
-        class FallbackPost: pass
-        post = FallbackPost()
-        post.metadata = metadata
-        post.content = content_md
-
-    metadata = post.metadata or {}
-    content_md = post.content or ""
-
-    # Render markdown to HTML with fenced_code, codehilite, and attr_list for Prism.js compatibility
-    html_body = markdown.markdown(
-        content_md,
-        extensions=[
-            'markdown.extensions.extra',
-            'markdown.extensions.sane_lists',
-            FencedCodeExtension(),
-            CodeHiliteExtension(guess_lang=False, css_class='language-'),
-            'markdown.extensions.attr_list'
-        ]
-    ) if markdown else content_md
-
-    data = metadata.copy()
-    data['body_html'] = html_body
-    print(f"📄 Parsed data via frontmatter: {data}")
-    return data
+    return front_matter, body
 
 # --- Front matter rendering helper ---
 def render_front_matter(data):
