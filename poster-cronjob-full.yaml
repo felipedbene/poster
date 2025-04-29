@@ -10,13 +10,20 @@ metadata:
   name: poster-cronjob
   namespace: poster
 spec:
-  schedule: "0 * * * *"
+  schedule: "0 */2 * * *"
   jobTemplate:
     spec:
       template:
         spec:
           containers:
-            - name: poster
-              image: ghcr.io/felipedbene/poster:latest
-              imagePullPolicy: IfNotPresent
+          - name: poster
+            image: ghcr.io/felipedbene/poster:latest
+            imagePullPolicy: Always
+            command: ["python3", "post.py"]
+            args:
+              - "--news"
+              - "--category=technology"
+            envFrom:
+              - secretRef:
+                  name: poster-env
           restartPolicy: OnFailure
