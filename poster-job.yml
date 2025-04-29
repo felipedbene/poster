@@ -37,7 +37,7 @@ spec:
           restartPolicy: OnFailure
           containers:
           - name: poster
-            image: <YOUR_REGISTRY>/poster:latest
+            image: ghcr.io/felipedbene/poster:latest
             imagePullPolicy: IfNotPresent
             envFrom:
             - secretRef:
