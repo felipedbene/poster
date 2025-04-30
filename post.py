@@ -1,3 +1,4 @@
+# Standard library imports
 import os
 import sys
 import argparse
@@ -18,6 +19,17 @@ import frontmatter
 from PIL import Image
 from io import BytesIO
 import base64
+# CoreML Stable Diffusion pipeline singleton for Apple Silicon
+from python_coreml_stable_diffusion.pipeline import CoreMLStableDiffusionPipeline
+from PIL import Image
+from pathlib import Path
+# Import CoreMLModel wrapper for CoreML model loading
+from python_coreml_stable_diffusion.coreml_model import CoreMLModel
+# Add missing imports for pipeline initialization
+from transformers import CLIPTokenizer, CLIPFeatureExtractor
+from diffusers import PNDMScheduler
+# CoreML Stable Diffusion pipeline singleton for Apple Silicon
+_coreml_pipe = None
 
 # --- Helper: Fetch or create taxonomy terms by name ---
 def get_term_ids(names: list[str], taxonomy: str) -> list[int]:
@@ -272,76 +284,57 @@ When it fits naturally(don't over use it), insert image placeholders like [IMAGE
     return full_raw
 
 def generate_image(prompt):
+    global _coreml_pipe
 
-    # --- Clean up and use the base prompt for photorealistic/neutral rendering ---
-    base_prompt = prompt.strip()
-    if not base_prompt.lower().startswith("a "):
-        base_prompt = "A " + base_prompt
-    # Append artisan-style modifiers for hand-crafted illustration
-    prompt = base_prompt + ", artisan hand-crafted style, watercolor textures, fine details, soft natural lighting"
-    print(f"🎨 Final artisan prompt sent to AUTOMATIC1111: {prompt}")
+    # Initialize CoreML pipeline on first use
+    if _coreml_pipe is None:
+        # Directory containing CoreML .mlpackage bundles
+        packages_dir = Path(__file__).parent / "coreml-stable-diffusion-v1-5" / "original" / "packages"
 
-    os.makedirs(".cache/images", exist_ok=True)
-    cache_key = hashlib.sha256(prompt.encode()).hexdigest()
-    webp_path = f".cache/images/{cache_key}.webp"
+        # Load CoreML models using CoreMLModel wrapper, specifying compute_unit="ALL"
+        text_encoder_model = CoreMLModel(str(packages_dir / "Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_text_encoder.mlpackage"), compute_unit="ALL")
+        unet_model         = CoreMLModel(str(packages_dir / "Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_unet.mlpackage"), compute_unit="ALL")
+        vae_decoder_model  = CoreMLModel(str(packages_dir / "Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_vae_decoder.mlpackage"), compute_unit="ALL")
+        safety_checker_model = CoreMLModel(str(packages_dir / "Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_safety_checker.mlpackage"), compute_unit="ALL")
 
-    if os.path.exists(webp_path):
-        print("🖼️ Cached WebP image used")
-        return webp_path
+        # Load scheduler and tokenizer from Hugging Face
+        scheduler = PNDMScheduler.from_pretrained("runwayml/stable-diffusion-v1-5", subfolder="scheduler")
+        tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+        feature_extractor = CLIPFeatureExtractor.from_pretrained("openai/clip-vit-base-patch32")
 
-    try:
-        print(f"🖌️ Sending prompt to AUTOMATIC1111: {prompt}")
-        response = requests.post(
-            f"{SD_API_BASE}/sdapi/v1/txt2img",
-            json={
-                # Core prompt
-                "prompt": prompt,
-                "negative_prompt": "blurry, lowres, artifacts, jpeg artifacts",
-                # Base resolution
-                "width": 800,
-                "height": 600,
-                "steps": 30,
-                "cfg_scale": 9.0,
-                "sampler_name": "DPM++ SDE Karras",
-                # High-res fix settings
-                "enable_hr": True,
-                "hr_scale": 2.0,
-                "hr_upscaler": "Latent",
-                "denoising_strength": 0.6,
-            },
-            timeout=900
+        # Initialize CoreML SD pipeline with the correct constructor signature:
+        _coreml_pipe = CoreMLStableDiffusionPipeline(
+            text_encoder_model,
+            unet_model,
+            vae_decoder_model,
+            scheduler,
+            tokenizer,
+            controlnet=None,
+            xl=False,
+            force_zeros_for_empty_prompt=True,
+            feature_extractor=feature_extractor,
+            safety_checker=safety_checker_model,
+            text_encoder_2=None,
+            tokenizer_2=None
         )
-        payload = response.json()
-        # Debug: log entire SD API response
-        print("🔍 [DEBUG] SD API response payload:", payload)
-        # Debug: check API base URL
-        print(f"🔍 [DEBUG] Using SD_API_BASE={SD_API_BASE}")
-        # Detect missing or disabled Automatic1111 API
-        if payload.get("detail") == "Not Found":
-            print("❌ AUTOMATIC1111 API endpoint not found. Ensure the WebUI is running with --api on the right host/port.")
-            return None
-        # Attempt to retrieve image list under either 'images' or 'artifacts'
-        imgs = payload.get("images") or payload.get("artifacts")
-        if not imgs:
-            raise KeyError(f"No image data found in SD API response; keys: {list(payload.keys())}")
-        image_data = imgs[0]
-    except Exception as e:
-        print(f"❌ Failed to generate image via AUTOMATIC1111: {e}")
-        raise
 
-    # Decode and save the image
-    img = Image.open(BytesIO(base64.b64decode(image_data)))
-    png_path = f".cache/images/{cache_key}.png"
-    img.save(png_path)
+    # Normalize prompt
+    prompt = prompt.strip()
+    # Compute cache key
+    cache_key = hashlib.sha256(prompt.encode()).hexdigest()
+    os.makedirs(".cache/images", exist_ok=True)
+    output_path = os.path.join(".cache/images", f"{cache_key}.png")
 
-    # Also save WebP version (optimized)
-    webp_path = os.path.splitext(png_path)[0] + ".webp"
-    try:
-        img.save(webp_path, format="WEBP", quality=80)
-        return webp_path
-    except Exception as e:
-        print(f"⚠️ Failed to convert image to WebP, using PNG instead: {e}")
-        return png_path
+    if os.path.exists(output_path):
+        print("🖼️ Cached image used:", output_path)
+        return output_path
+
+    # Generate image
+    print(f"🎨 Generating image via CoreML for prompt: {prompt}")
+    result = _coreml_pipe(prompt=prompt, num_inference_steps=30, guidance_scale=7.5)
+    image = result.images[0]
+    image.save(output_path)
+    return output_path
 
 def upload_page(title, slug, content, media_id=None, status="publish", categories=None, tags=None, meta_desc=None):
     url = f"{WP_URL}/wp-json/wp/v2/pages"
