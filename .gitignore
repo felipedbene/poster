@@ -8,3 +8,8 @@ __pycache__/
 .cache/
 # ignore all our test files
 *poster.yml
+
+# apple ai models
+coreml-stable-diffusion-v1-5/
+ml-stable-diffusion/
+ollama/
