@@ -111,7 +111,17 @@ Limit the JSON array to exactly 3 section headings.
     match = re.search(r'\[.*\]', raw_outline, flags=re.DOTALL)
     outline_json = match.group(0) if match else raw_outline
     try:
-        return json.loads(outline_json)
+        arr = json.loads(outline_json)
+        # Normalize outline entries to strings
+        headings = []
+        for item in arr:
+            if isinstance(item, str):
+                headings.append(item)
+            elif isinstance(item, dict):
+                # Prefer 'title' or 'Title' keys, otherwise take first value
+                val = item.get('title') or item.get('Title') or next(iter(item.values()))
+                headings.append(str(val))
+        return headings
     except Exception as e:
         print(f"⚠️ Failed to parse outline JSON: {e}")
         return []
@@ -123,8 +133,8 @@ except ImportError:
     markdown = None
 
 
-# Load .env
-load_dotenv()
+# Load .env, overriding existing environment variables
+load_dotenv(override=True)
 
 WP_USER = os.getenv("WORDPRESS_USERNAME")
 WP_PASS = os.getenv("WORDPRESS_APP_PASSWORD")
@@ -198,6 +208,8 @@ alt_text: ""
         timeout=300
     )
     meta_data = meta_resp.json().get("response", "").strip()
+    print("🔍 [DEBUG] meta_data from LLM (first 300 chars):")
+    print(meta_data[:300].replace("\n", "\\n"))
     # Start full_raw with metadata front matter
     full_raw = meta_data + "\n"
     # Initialize chaining context
@@ -209,11 +221,21 @@ alt_text: ""
     outline = outline[:3]
     # For each section heading, generate its content
     for section in outline:
+
         section_prompt = f"""
-Write the next section titled “{section}” in a friendly, engaging style—imagine you’re explaining to a friend. Use smooth transitions, a bit of humor, and raise the bar on clarity. When it makes sense, insert image placeholders like [IMAGE: description of scene]. Only output the section content.
-"""
+Write the next section titled “{section}” in a friendly, engaging style—imagine you’re explaining to a curious friend. 
+Use smooth transitions, a bit of humor, and emphasize clarity.
+
+Your output should include:
+- At least one **specific comparison, benchmark, stat, or quantified insight** (real or plausible) relevant to the topic.
+- A **real-world use case or anecdote** that illustrates the core point or claim.
+- Avoid vague or generic claims—ground the section in reality with a concrete example, data point, or mini-case study.
+- It's okay to be witty or over-the-top, but never at the expense of clarity or informativeness.
+
+When it fits naturally(don't over use it), insert image placeholders like [IMAGE: description of scene]. Only output the section content.
+"""     
         # Minimal feedback for section generation
-        print(f"🔨 Generating section: {section}")
+        print(f"🔨 Generating section content: {section}")
         sec_resp = requests.post(
             f"http://{OLLAMA_SERVER}/api/generate",
             json={
@@ -228,6 +250,9 @@ Write the next section titled “{section}” in a friendly, engaging style—im
         )
         sec_data = sec_resp.json()
         section_text = sec_data.get("response", "").strip()
+        # Sanitize markdown headings or bold lines that could break YAML
+        section_text = re.sub(r'^\s*\*\*(.*?)\*\*', r'\1', section_text, flags=re.MULTILINE)
+        section_text = re.sub(r'^#+\s*(.*)', r'\1', section_text, flags=re.MULTILINE)
         # Strip any nested YAML front-matter
         section_text = _strip_frontmatter(section_text)
         # Remove a repeated section heading if present as first line
@@ -238,30 +263,6 @@ Write the next section titled “{section}” in a friendly, engaging style—im
         context_accum += section_text + "\n"
         # Append each section to full_raw (metadata remains at top)
         full_raw += f"{section_text}\n"
-    # Post-process: expand the full article by ~10% for extra depth
-    try:
-        expansion_prompt = f"""
-Expand the following article by roughly 10%, adding deeper insights and details without repeating content:
-
-{context_accum}
-"""
-        exp_resp = requests.post(
-            f"http://{OLLAMA_SERVER}/api/generate",
-            json={
-                "model": "llama3.2:latest",
-                "prompt": expansion_prompt,
-                "temperature": 0.7,
-                "max_tokens": 200,
-                "stream": False,
-                "device": "cuda",
-            },
-            timeout=120
-        )
-        expansion = exp_resp.json().get("response", "").strip()
-        expansion = _strip_frontmatter(expansion)
-        full_raw += "\n" + expansion + "\n"
-    except Exception as e:
-        print(f"⚠️ Expansion step failed: {e}")
     # Write full_raw to cache and use as the response_text
     with open(cache_path, "w") as f:
         f.write(full_raw)
@@ -272,18 +273,13 @@ Expand the following article by roughly 10%, adding deeper insights and details 
 
 def generate_image(prompt):
 
-    # --- Clean up and enhance the prompt for cartoon-style rendering ---
+    # --- Clean up and use the base prompt for photorealistic/neutral rendering ---
     base_prompt = prompt.strip()
     if not base_prompt.lower().startswith("a "):
         base_prompt = "A " + base_prompt
-    # Cartoonify: use cel-shading, bold outlines, and vibrant palette
-    enhanced_prompt = (
-        base_prompt
-        + ", cartoon style, cel-shading, bold outlines, vibrant colors, stylized 3D illustration"
-    )
-    print(f"🎨 Final prompt sent to AUTOMATIC1111: {enhanced_prompt}")
-    prompt = enhanced_prompt
-    # ---------------------------------------------------------------
+    # Append artisan-style modifiers for hand-crafted illustration
+    prompt = base_prompt + ", artisan hand-crafted style, watercolor textures, fine details, soft natural lighting"
+    print(f"🎨 Final artisan prompt sent to AUTOMATIC1111: {prompt}")
 
     os.makedirs(".cache/images", exist_ok=True)
     cache_key = hashlib.sha256(prompt.encode()).hexdigest()
@@ -304,7 +300,7 @@ def generate_image(prompt):
                 # Base resolution
                 "width": 800,
                 "height": 600,
-                "steps": 50,
+                "steps": 30,
                 "cfg_scale": 9.0,
                 "sampler_name": "DPM++ SDE Karras",
                 # High-res fix settings
@@ -313,10 +309,22 @@ def generate_image(prompt):
                 "hr_upscaler": "Latent",
                 "denoising_strength": 0.6,
             },
-            timeout=600
+            timeout=900
         )
-        r = response.json()
-        image_data = r['images'][0]
+        payload = response.json()
+        # Debug: log entire SD API response
+        print("🔍 [DEBUG] SD API response payload:", payload)
+        # Debug: check API base URL
+        print(f"🔍 [DEBUG] Using SD_API_BASE={SD_API_BASE}")
+        # Detect missing or disabled Automatic1111 API
+        if payload.get("detail") == "Not Found":
+            print("❌ AUTOMATIC1111 API endpoint not found. Ensure the WebUI is running with --api on the right host/port.")
+            return None
+        # Attempt to retrieve image list under either 'images' or 'artifacts'
+        imgs = payload.get("images") or payload.get("artifacts")
+        if not imgs:
+            raise KeyError(f"No image data found in SD API response; keys: {list(payload.keys())}")
+        image_data = imgs[0]
     except Exception as e:
         print(f"❌ Failed to generate image via AUTOMATIC1111: {e}")
         raise
@@ -441,28 +449,61 @@ def parse_generated_text(text: str) -> Tuple[Dict, str]:
     front_matter: Dict = {}
     body = text
 
-    # Regex to find front-matter at the very top
-    match = re.match(r'^---\s*\n(.*?)\n---\s*\n?', text, flags=re.S)
-    if match:
-        fm_text = match.group(1)
-        try:
-            # Safely parse YAML front-matter
-            fm = yaml.safe_load(fm_text)
-            if isinstance(fm, dict):
-                # Normalize list fields if returned as JSON-formatted strings
-                for list_field in ("categories", "tags", "synonyms", "inline_image_prompts"):
-                    val = fm.get(list_field)
-                    if isinstance(val, str):
-                        try:
-                            fm[list_field] = json.loads(val)
-                        except Exception:
-                            pass
-                front_matter = fm
-                body = text[match.end():]
-        except yaml.YAMLError:
-            logging.warning("⚠️ Front-matter parse failed, skipping it")
-            # Skip front-matter entirely if invalid
+    print("🔍 [DEBUG] parse_generated_text received text (first 500 chars):")
+    print(text[:500].replace("\n", "\\n"))
 
+    # Flexible front-matter: allow missing closing fence
+    match = re.search(r'^\s*---\s*\n(.*?)(?:\n---\s*|$)', text, flags=re.S | re.MULTILINE)
+    if not match:
+        print("⚠️ [DEBUG] No front-matter fences found in text.")
+        return {}, text
+    fm_text = match.group(1)
+    tail = text[match.end():]
+    if not tail.lstrip().startswith('---'):
+        print("⚠️ [DEBUG] Missing closing '---'; extracting until blank line")
+        stripped = text.lstrip()[3:]
+        parts = stripped.split('\n\n', 1)
+        fm_text = parts[0]
+        body = parts[1] if len(parts) > 1 else ""
+    else:
+        print("🔍 [DEBUG] YAML front-matter block detected:")
+        print(fm_text)
+        body = text[match.end():]
+    def _quote_value(line: str) -> str:
+        if ':' not in line or line.strip().startswith('- '):
+            return line
+        key, val = line.split(':', 1)
+        val = val.strip()
+        # Skip quoting if there is no value after the colon
+        if not val:
+            return line
+        # Skip if already quoted or is a list
+        if (val.startswith('"') and val.endswith('"')) or val.startswith('['):
+            return line
+        # Quote the value, escaping any existing quotes
+        safe_val = val.replace('"', '\\"')
+        return f"{key}: \"{safe_val}\""
+    fm_lines = fm_text.splitlines()
+    fm_text = "\n".join(_quote_value(l) for l in fm_lines)
+    try:
+        # Parse possibly multiple YAML documents and take the first as front-matter
+        docs = list(yaml.safe_load_all(fm_text))
+        if docs and isinstance(docs[0], dict):
+            fm = docs[0]
+            # Normalize list fields if returned as JSON-formatted strings
+            for list_field in ("categories", "tags", "synonyms", "inline_image_prompts"):
+                val = fm.get(list_field)
+                if isinstance(val, str):
+                    try:
+                        fm[list_field] = json.loads(val)
+                    except Exception:
+                        pass
+            front_matter = fm
+        else:
+            raise ValueError(f"Invalid front-matter structure: {docs}")
+    except Exception as e:
+        print(f"❌ [DEBUG] YAML front-matter parsing failed: {e}")
+        raise
     return front_matter, body
 
 # --- Front matter rendering helper ---
@@ -752,28 +793,42 @@ def process_and_publish(idea, keyphrase, args):
     Returns the published link.
     """
     # Always generate fresh content and parse it directly
-    raw = generate_blog_components(idea)
-    parsed = parse_generated_text(raw)
-
-    # Fallback if title/slug/keyphrase missing in parsed metadata
-    title = parsed.get("title") or idea
-    slug_source = parsed.get("slug") or title
+    # Retry up to 3 times if parsing or metadata is missing
+    for attempt in range(1, 4):
+        raw = generate_blog_components(idea)
+        print(f"🔄 Attempt {attempt} raw preview:")
+        print(raw[:200].replace("\n","\\n"))
+        try:
+            front_matter, body_html = parse_generated_text(raw)
+        except Exception as exc:
+            print(f"⚠️ Attempt {attempt} failed parsing YAML: {exc}")
+            time.sleep(2 ** (attempt - 1))
+            continue
+        if front_matter.get("title") and front_matter.get("slug") and front_matter.get("keyphrase"):
+            break
+        print(f"⚠️ Attempt {attempt} missing essential metadata, retrying…")
+        time.sleep(2 ** (attempt - 1))
+    else:
+        raise RuntimeError("❌ Failed to generate valid metadata after 3 attempts")
+    # Use metadata directly without fallbacks
+    title = front_matter["title"]
+    slug_source = front_matter["slug"]
     slug = slug_source.lower().replace(" ", "-")
-    keyphrase_final = parsed.get("keyphrase") or keyphrase
+    keyphrase_final = front_matter["keyphrase"]
 
     # Safe fallback for meta_title and meta_desc
-    raw_meta_title = parsed.get("meta_title") or title
+    raw_meta_title = front_matter.get("meta_title", title)
     meta_title = raw_meta_title[:60]
 
-    raw_meta_desc = parsed.get("meta_desc") or (parsed.get("body_html", "")[:155] if "body_html" in parsed else "")
+    raw_meta_desc = front_matter.get("meta_desc", "")[:155]
     # If still empty, fallback to content below after it's set
     meta_desc = raw_meta_desc[:155]
 
-    synonyms = parsed.get("synonyms", [])
-    image_prompt = parsed.get("image_prompt") or title
-    alt_text = parsed.get("alt_text", "")
+    synonyms = front_matter.get("synonyms", [])
+    image_prompt = front_matter.get("hero_image_prompt", title)
+    alt_text = front_matter.get("alt_text", "")
     # Use only the clean HTML body as content
-    content = parsed.get("body_html", "").lstrip("|").lstrip()
+    content = body_html.lstrip("|").lstrip()
 
     # Summary generation disabled until body parsing is fixed
     # try:
@@ -808,8 +863,12 @@ def process_and_publish(idea, keyphrase, args):
 
     # --- Inline image injection and featured-image logic ---
     prompts = extract_image_prompts_from_body(content)
+    # Limit inline images to at most two per post
+    prompts = prompts[:2]
     if prompts:
         content = inject_inline_images(content, prompts, alt_text)
+    # Remove any leftover image placeholders
+    content = re.sub(r'\[IMAGE:.*?\]', '', content)
 
     # If there are no images in the body at all, generate a featured image
     media_id = None
@@ -831,7 +890,7 @@ def process_and_publish(idea, keyphrase, args):
         status = "draft"
 
     # Normalize AI-generated taxonomy lists to flat lists of strings
-    raw_categories = parsed.get("categories", []) or ["default-category"]
+    raw_categories = front_matter.get("categories", []) or ["default-category"]
     category_names = []
     for item in raw_categories:
         if isinstance(item, list):
@@ -840,7 +899,7 @@ def process_and_publish(idea, keyphrase, args):
         else:
             category_names.append(str(item))
 
-    raw_tags = parsed.get("tags", []) or [keyphrase]
+    raw_tags = front_matter.get("tags", []) or [keyphrase]
     tag_names = []
     for item in raw_tags:
         if isinstance(item, list):

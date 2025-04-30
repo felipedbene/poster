@@ -1,2 +1,12 @@
 2025-04-28 22:48:44,777 📥 Fetching new trending topics from News API...
 2025-04-28 22:48:45,048 🌐 Retrieved 7 headlines.
+2025-04-29 21:15:40,466 ⚠️ Front-matter parse failed, skipping it
+2025-04-29 21:42:13,782 ⚠️ Front-matter parse failed, skipping it
+2025-04-29 21:42:59,327 ⚠️ Front-matter parse failed, skipping it
+2025-04-29 21:49:52,517 ⚠️ Failed to fetch page 2: 503 Server Error: Service Unavailable for url: https://debene.dev/wp-json/wp/v2/posts?per_page=100&page=2
+2025-04-29 23:17:06,644 📡 Attempting to send final healthcheck ping...
+2025-04-29 23:17:07,119 ✅ Healthcheck ping sent with status 200
+2025-04-29 23:17:07,120 📡 Healthcheck ping execution finished.
+2025-04-29 23:39:39,227 📡 Attempting to send final healthcheck ping...
+2025-04-29 23:39:39,738 ✅ Healthcheck ping sent with status 200
+2025-04-29 23:39:39,738 📡 Healthcheck ping execution finished.
