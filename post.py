@@ -2,6 +2,8 @@
 import os
 import sys
 import argparse
+#
+import markdown
 import requests
 import hashlib
 import json
@@ -10,6 +12,8 @@ import random
 import re
 import logging
 import time
+import urllib.parse
+import datetime
 from dotenv import load_dotenv
 from markdown.extensions.fenced_code import FencedCodeExtension
 from markdown.extensions.codehilite import CodeHiliteExtension
@@ -30,6 +34,11 @@ from transformers import CLIPTokenizer, CLIPFeatureExtractor
 from diffusers import PNDMScheduler
 # CoreML Stable Diffusion pipeline singleton for Apple Silicon
 _coreml_pipe = None
+
+# Needed for reading system events from multiple sources
+import subprocess
+
+
 
 # --- Helper: Fetch or create taxonomy terms by name ---
 def get_term_ids(names: list[str], taxonomy: str) -> list[int]:
@@ -97,18 +106,18 @@ def generate_blog_outline(topic):
     Generate a detailed outline (list of section headings) for the given topic.
     """
     outline_prompt = f"""
-You have up to 500 tokens—generate a detailed JSON list of section headings (strings) for a **parody article** on “{topic}”.
+You have up to 700 tokens—generate a detailed JSON list of section headings (strings) for a **parody blog post** on “{topic}”.
 Imagine it as a witty, sarcastic, or over-the-top humorous take.
 Only output a valid JSON array of strings, e.g. ["Ridiculous Introduction", "Absurd Claims", "Conclusion Full of Regret"].
-Limit the JSON array to exactly 3 section headings.
+Limit the JSON array to exactly 4 section headings.
 """
     resp = requests.post(
         f"http://{OLLAMA_SERVER}/api/generate",
         json={
             "model": "llama3.2:latest",
             "prompt": outline_prompt,
-            "temperature": 0.3,
-            "max_tokens": 500,
+            "temperature": 0.6,
+            "max_tokens": 700,
             "stream": False,
             "device": "cuda",
         },  
@@ -139,12 +148,6 @@ Limit the JSON array to exactly 3 section headings.
         return []
 
 
-try:
-    import markdown
-except ImportError:
-    markdown = None
-
-
 # Load .env, overriding existing environment variables
 load_dotenv(override=True)
 
@@ -155,6 +158,8 @@ HC_APIKEY     = os.getenv("HC_APIKEY")
 SD_API_BASE   = os.getenv("SD_API_URL")
 OLLAMA_SERVER = os.getenv("OLLAMA_SERVER")
 NEWSAPI_KEY   = os.getenv("NEWSAPI_KEY")
+
+
 
 # Only validate required environment variables for this script
 required_env = {
@@ -170,120 +175,50 @@ missing = [k for k, v in required_env.items() if not v]
 if missing:
     raise EnvironmentError(f"❌ Missing environment variables: {', '.join(missing)}")
 
+# Default Stable Diffusion parameters (override via environment)
+STEPS_DEFAULT = int(os.getenv("SD_STEPS", "30"))
+SCALE_DEFAULT = float(os.getenv("SD_SCALE", "7.5"))
 
 
 def generate_blog_components(topic):
-    content = ""
-    comeco = False
-    #Create a cache directory if it doesn't exist
+    # One-shot full article generation
+    prompt = f"""
+You are a seasoned pop-culture journalist known for crafting fluid, engaging, and witty narratives. Write a 1000–1500 word feature on “{topic}” with these requirements:
+- A compelling introduction that sets the scene and hooks the reader.
+- Five numbered sections with descriptive, evocative headings; each should flow seamlessly into the next.
+- A polished tone—humorous and slightly sarcastic, but never juvenile or overly cutesy.
+- Rich, authentic anecdotes and vivid imagery (e.g., describe Blue Ivy’s stage presence with concrete details, not just “cute”).
+- A concise conclusion that ties the themes together.
+- YAML front-matter (fenced with '---') containing title, slug, meta_title, meta_desc, keyphrase, categories, tags, hero_image_prompt, inline_image_prompts, and alt_text.
+- No meta commentary like “In the next section” or wink-nudge asides.
+- Integrate parenthetical citations where appropriate.
+Output only the front-matter followed by the HTML body with inline placeholders like [IMAGE: ...].
+"""
     os.makedirs(".cache/posts", exist_ok=True)
     cache_key = hashlib.sha256(topic.encode()).hexdigest()
     cache_path = f".cache/posts/{cache_key}.yaml"
-    if os.path.exists(cache_path):
-        with open(cache_path, "r") as f:
-            cached = f.read()
-        if "IMAGE_PROMPT:" not in cached:
-            print("CACHE MISS - Re-generating Image")
-        else:
-            print(f"💾 Cached blog retrieved for: {topic}")
-            return cached
-
-    # Generate metadata front matter via LLM
-    meta_prompt = f"""
-You are a witty and conversational tech blogger crafting a tutorial on “{topic}.” Using up to 300 tokens, output only valid YAML front-matter fenced with triple dashes. Fill in each field thoughtfully—no placeholders. Also:
-- Suggest a `hero_image_prompt` for the article’s header.
-- Include a list field `inline_image_prompts` for images placed within sections.
----
-title: ""
-meta_title: ""
-meta_desc: ""
-slug: ""
-keyphrase: ""
-synonyms: []
-categories: []
-tags: []
-hero_image_prompt: ""
-inline_image_prompts: []
-alt_text: ""
----
-"""
-    meta_resp = requests.post(
+    print(f"🔨 Generating full post for topic: {topic}")
+    resp = requests.post(
         f"http://{OLLAMA_SERVER}/api/generate",
         json={
             "model": "llama3.2:latest",
-            "prompt": meta_prompt,
-            "temperature": 0.3,
-            "max_tokens": 300,
+            "prompt": prompt,
+            "temperature": 0.7,
+            "max_tokens": 2000,
             "stream": False,
             "device": "cuda",
         },
-        timeout=300
+        timeout=600
     )
-    meta_data = meta_resp.json().get("response", "").strip()
-    print("🔍 [DEBUG] meta_data from LLM (first 300 chars):")
-    print(meta_data[:300].replace("\n", "\\n"))
-    # Start full_raw with metadata front matter
-    full_raw = meta_data + "\n"
-    # Initialize chaining context
-    context_accum = full_raw
-
-    # Generate outline and then expand each section
-    outline = generate_blog_outline(topic)
-    # Only keep the first three sections for deeper exploration
-    outline = outline[:3]
-    # For each section heading, generate its content
-    for section in outline:
-
-        section_prompt = f"""
-Write the next section titled “{section}” in a friendly, engaging style—imagine you’re explaining to a curious friend. 
-Use smooth transitions, a bit of humor, and emphasize clarity.
-
-Your output should include:
-- At least one **specific comparison, benchmark, stat, or quantified insight** (real or plausible) relevant to the topic.
-- A **real-world use case or anecdote** that illustrates the core point or claim.
-- Avoid vague or generic claims—ground the section in reality with a concrete example, data point, or mini-case study.
-- It's okay to be witty or over-the-top, but never at the expense of clarity or informativeness.
-
-When it fits naturally(don't over use it), insert image placeholders like [IMAGE: description of scene]. Only output the section content.
-"""     
-        # Minimal feedback for section generation
-        print(f"🔨 Generating section content: {section}")
-        sec_resp = requests.post(
-            f"http://{OLLAMA_SERVER}/api/generate",
-            json={
-                "model": "llama3.2:latest",
-                "prompt": section_prompt,
-                "temperature": 0.7,
-                "max_tokens": 1200,
-                "stream": False,
-                "device": "cuda",
-            },
-            timeout=600
-        )
-        sec_data = sec_resp.json()
-        section_text = sec_data.get("response", "").strip()
-        # Sanitize markdown headings or bold lines that could break YAML
-        section_text = re.sub(r'^\s*\*\*(.*?)\*\*', r'\1', section_text, flags=re.MULTILINE)
-        section_text = re.sub(r'^#+\s*(.*)', r'\1', section_text, flags=re.MULTILINE)
-        # Strip any nested YAML front-matter
-        section_text = _strip_frontmatter(section_text)
-        # Remove a repeated section heading if present as first line
-        lines = section_text.splitlines()
-        if lines and lines[0].strip().startswith(section):
-            section_text = "\n".join(lines[1:]).strip()
-        # Update chaining context with this section
-        context_accum += section_text + "\n"
-        # Append each section to full_raw (metadata remains at top)
-        full_raw += f"{section_text}\n"
-    # Write full_raw to cache and use as the response_text
+    full_raw = resp.json().get("response", "").strip()
     with open(cache_path, "w") as f:
         f.write(full_raw)
-    response_text = full_raw
-
-    # Return the full raw content (with [IMAGE: ...] placeholders intact)
     return full_raw
 
-def generate_image(prompt):
+def generate_image(prompt, steps=STEPS_DEFAULT, scale=SCALE_DEFAULT):
+    # Support lists of prompts by concatenating into one string
+    if isinstance(prompt, list):
+        prompt = " ".join(str(p) for p in prompt)
     global _coreml_pipe
 
     # Initialize CoreML pipeline on first use
@@ -357,31 +292,67 @@ def upload_page(title, slug, content, media_id=None, status="publish", categorie
     r.raise_for_status()
     return r.json()
 
+def preprocess_system_events(raw_events: str) -> str:
+    """
+    Summarize system logs for better prompt quality by:
+    - Grouping repeated log types
+    - Deduplicating lines
+    - Adding source markers
+    """
+    lines = raw_events.splitlines()
+    grouped = {
+        "macOS Unified Log": [],
+        "Kernel/dmesg": [],
+        "Authentication": [],
+        "Kubernetes": [],
+        "Syslog": [],
+        "Other": []
+    }
+
+    current_group = "Other"
+    seen = set()
+    for line in lines:
+        line = line.strip()
+        if not line or line in seen:
+            continue
+        seen.add(line)
+        if "Unified macOS log" in line:
+            current_group = "macOS Unified Log"
+        elif "dmesg" in line:
+            current_group = "Kernel/dmesg"
+        elif "Authentication logs" in line:
+            current_group = "Authentication"
+        elif "Kubernetes events" in line:
+            current_group = "Kubernetes"
+        elif "syslog" in line:
+            current_group = "Syslog"
+        grouped.setdefault(current_group, []).append(line)
+
+    summary = []
+    for group, logs in grouped.items():
+        if logs:
+            summary.append(f"### {group} ({len(logs)} entries)")
+            summary.extend(logs[-20:])  # Show last 20 per group max
+
+    return "\n".join(summary[-200:])  # Max 200 lines overall
+
 def upload_image_to_wp(image_path, alt_text):
     with open(image_path, 'rb') as img:
         filename = os.path.basename(image_path)
         headers = {
             "Content-Disposition": f"attachment; filename={filename}"
         }
-        r = requests.post(f"{WP_URL}/wp-json/wp/v2/media", auth=(WP_USER, WP_PASS), headers=headers, files={'file': img})
+        r = requests.post(
+            f"{WP_URL}/wp-json/wp/v2/media",
+            auth=(WP_USER, WP_PASS),
+            headers=headers,
+            files={'file': img},
+            data={'alt_text': alt_text}
+        )
         r.raise_for_status()
         media_json = r.json()
         media_id = media_json.get("id")
         media_url = media_json.get("source_url")
-
-        # Retry patch for alt text update with exponential backoff
-        import time
-        for attempt in range(5):
-            try:
-                r2 = requests.post(f"{WP_URL}/wp-json/wp/v2/media/{media_id}",
-                                   auth=(WP_USER, WP_PASS),
-                                   json={"alt_text": alt_text})
-                r2.raise_for_status()
-                break
-            except requests.exceptions.RequestException as e:
-                wait_time = 2 ** attempt
-                print(f"⚠️ Alt text update failed (attempt {attempt + 1}), retrying in {wait_time}s: {e}")
-                time.sleep(wait_time)
         return media_id, media_url
 
 def upload_post(title, slug, content, meta_title, meta_desc, keyphrase, media_id, categories, tags, publish_date=None, publish_date_gmt=None, status="draft", post_id=None ):
@@ -395,6 +366,12 @@ def upload_post(title, slug, content, meta_title, meta_desc, keyphrase, media_id
         "categories": categories,
         "tags": tags
     }
+    # Include Yoast SEO meta in the initial creation payload
+    payload["meta"] = {
+        "yoast_wpseo_focuskw": keyphrase,
+        "yoast_wpseo_metadesc": meta_desc,
+        "yoast_wpseo_title": meta_title
+    }
     print(f"Payload: {payload}")
     if publish_date:
         payload["date"] = publish_date
@@ -403,7 +380,7 @@ def upload_post(title, slug, content, meta_title, meta_desc, keyphrase, media_id
 
     if post_id:
         url = f"{WP_URL}/wp-json/wp/v2/posts/{post_id}"
-        method = requests.post  # Use requests.patch if partial update is preferred
+        method = requests.patch
     else:
         url = f"{WP_URL}/wp-json/wp/v2/posts"
         method = requests.post
@@ -453,10 +430,11 @@ def parse_generated_text(text: str) -> Tuple[Dict, str]:
     fm_text = match.group(1)
     tail = text[match.end():]
     if not tail.lstrip().startswith('---'):
-        print("⚠️ [DEBUG] Missing closing '---'; extracting until blank line")
+        print("⚠️ [DEBUG] Missing closing '---'; force-wrapping front matter")
         stripped = text.lstrip()[3:]
         parts = stripped.split('\n\n', 1)
         fm_text = parts[0]
+        fm_text = '---\n' + fm_text.strip() + '\n---'
         body = parts[1] if len(parts) > 1 else ""
     else:
         print("🔍 [DEBUG] YAML front-matter block detected:")
@@ -573,12 +551,109 @@ def scan_broken_links():
         f.writelines(broken)
     print(f"🔍 Scan complete. {len(broken)} broken links written to {output_file}")
 
+
+# --- Helper: Read last 2 hours of system logs ---
+def read_syslog_last_two_hours() -> str:
+    """
+    Read the last 2 hours of system logs from /var/log/syslog or /var/log/system.log.
+    Returns the joined log lines as a single string.
+    """
+    import os, datetime
+    # Choose the first existing log path
+    for log_path in ('/var/log/syslog', '/var/log/system.log'):
+        if os.path.exists(log_path):
+            break
+    else:
+        print("⚠️ No syslog file found at /var/log/syslog or /var/log/system.log")
+        return ""
+
+    cutoff = datetime.datetime.now() - datetime.timedelta(hours=48)
+    entries = []
+    with open(log_path, 'r') as f:
+        for line in f:
+            parts = line.split()
+            if len(parts) < 3:
+                continue
+            ts_str = " ".join(parts[:3])
+            try:
+                ts = datetime.datetime.strptime(ts_str, '%b %d %H:%M:%S')
+                ts = ts.replace(year=cutoff.year)
+            except Exception:
+                continue
+            if ts >= cutoff:
+                entries.append(line.rstrip())
+    # Return the last 500 lines to avoid overly long prompts
+    return "\n".join(entries[-500:])
+
+
+# --- Helper: Collect system events from multiple sources ---
+def read_system_events() -> str:
+    """
+    Gather recent system events from multiple sources and return them as a single string.
+    """
+    entries = []
+
+    # 1) Last 2 hours of unified logs (macOS)
+    try:
+        entries.append("=== Unified macOS log (last 2h) ===")
+        unified = subprocess.check_output(
+            ["log", "show", "--style", "syslog", "--last", "2h"],
+            text=True, stderr=subprocess.DEVNULL
+        )
+        entries.append(unified)
+    except Exception:
+        pass
+
+    # 2) Last 100 dmesg lines
+    try:
+        entries.append("=== dmesg (tail 100) ===")
+        dmesg_out = subprocess.check_output(
+            ["dmesg", "-T", "--time-format", "iso8601"],
+            text=True, stderr=subprocess.DEVNULL
+        ).splitlines()[-100:]
+        entries.append("\n".join(dmesg_out))
+    except Exception:
+        pass
+
+    # 3) Recent login/logout activity
+    try:
+        entries.append("=== Authentication logs (last 2h) ===")
+        last_out = subprocess.check_output(
+            ["last", "-2h"],
+            text=True, stderr=subprocess.DEVNULL
+        )
+        entries.append(last_out)
+    except Exception:
+        pass
+
+    # 4) Kubernetes events (if kubectl available)
+    try:
+        entries.append("=== Kubernetes events (last 2h) ===")
+        kube = subprocess.check_output(
+            ["kubectl", "get", "events", "--all-namespaces", "--since=2h"],
+            text=True, stderr=subprocess.DEVNULL
+        )
+        entries.append(kube)
+    except Exception:
+        pass
+
+    # Fallback to syslog for any remaining events
+    try:
+        entries.append("=== syslog (last 2h) ===")
+        entries.append(read_syslog_last_two_hours())
+    except Exception:
+        pass
+
+    # Limit output size
+    combined = "\n".join(entries)
+    return "\n".join(combined.splitlines()[-500:])
+
 def inject_adsense_snippet(html):
     ad_html = """
 <!-- Google AdSense Ad -->
 <div style="margin: 2em 0; padding: 1em; border-top: 1px dashed #ccc; font-family: 'Lora', Georgia, serif;">
   <small style="display: block; text-align: center; color: #888; margin-bottom: 0.5em;">
-    🪙 Supports Lipe Land
+    🪙 Supports Me
   </small>
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1479106809372421"
      crossorigin="anonymous"></script>
@@ -614,8 +689,8 @@ def extract_image_prompts_from_body(html: str) -> list[str]:
         caption = match.group(1).strip()
         if caption and caption not in prompts:
             prompts.append(caption)
-    # Match [IMAGE: description] placeholders
-    for match in re.finditer(r'\[IMAGE:\s*(.*?)\]', html, re.IGNORECASE):
+    # Match [IMAGE: ...] and [inline_image_prompt: ...] placeholders
+    for match in re.finditer(r'\[(?:IMAGE|inline_image_prompt):\s*(.*?)\]', html, re.IGNORECASE):        
         caption = match.group(1).strip()
         if caption and caption not in prompts:
             prompts.append(caption)
@@ -629,26 +704,65 @@ def inject_inline_images(html: str, prompts: list[str], alt_text: str) -> str:
     For each caption prompt, generate an image, upload it, and wrap the existing <figcaption>
     in a <figure> with the new <img>. Also replaces [IMAGE: description] placeholders.
     """
+    def prompt_to_str(prompt):
+        if isinstance(prompt, str):
+            return prompt
+        elif isinstance(prompt, dict):
+            # Try to get the first value of the dict
+            if len(prompt) == 1:
+                return str(next(iter(prompt.values())))
+            # If multiple keys, join values
+            return " ".join(str(v) for v in prompt.values())
+        elif isinstance(prompt, list):
+            return " ".join(str(p) for p in prompt)
+        else:
+            return str(prompt)
+
+    # Always use default steps/scale
+    steps = STEPS_DEFAULT
+    scale = SCALE_DEFAULT
+
     for prompt in prompts:
-        img_path = generate_image(prompt)
+        prompt_str = prompt_to_str(prompt)
+        img_path = generate_image(prompt_str)
         mid, url = upload_image_to_wp(img_path, alt_text)
         # Wrap the figcaption with a figure/html
-        pattern = fr'(<figcaption>\s*{re.escape(prompt)}\s*</figcaption>)'
+        pattern = fr'(<figcaption>\s*{re.escape(prompt_str)}\s*</figcaption>)'
         replacement = rf'<figure><img src="{url}" alt="{alt_text}"/>\1</figure>'
         html = re.sub(pattern, replacement, html, flags=re.IGNORECASE)
     # Replace any leftover [IMAGE: description] placeholders
     for prompt in prompts:
-        img_path = generate_image(prompt)
+        prompt_str = prompt_to_str(prompt)
+        img_path = generate_image(prompt_str)
         mid, url = upload_image_to_wp(img_path, alt_text)
         replacement = (
             f'<figure>'
             f'<img src="{url}" alt="{alt_text}"/>'
-            f'<figcaption>{prompt}</figcaption>'
+            f'<figcaption>{prompt_str}</figcaption>'
             f'</figure>'
         )
-        placeholder_pattern = rf'\[IMAGE:\s*{re.escape(prompt)}\s*\]'
+        placeholder_pattern = rf'\[(?:IMAGE|inline_image_prompt):\s*{re.escape(prompt_str)}\s*\]'
         html = re.sub(placeholder_pattern, replacement, html, flags=re.IGNORECASE)
     return html
+
+# --- Helper: Generate NewsAPI code snippet for a query ---
+def generate_newsapi_code_snippet(query: str) -> str:
+    """
+    Return a markdown code snippet showing how to call NewsAPI /everything for the given query.
+    """
+    today = datetime.date.today().isoformat()
+    encoded = urllib.parse.quote(query)
+    return f"""```http
+GET https://newsapi.org/v2/everything?q={encoded}&from={today}&sortBy=popularity&apiKey=YOUR_API_KEY
+```
+```bash
+curl https://newsapi.org/v2/everything -G \\
+  -d q="{query}" \\
+  -d from={today} \\
+  -d sortBy=popularity \\
+  -d apiKey=$NEWSAPI_KEY
+```
+"""
 
 def enrich_with_internal_links(parsed_body, all_posts):
     """
@@ -697,32 +811,41 @@ def fetch_trending_topics(count=5, category="technology", query=None):
         return []
 
     topics = []
-    # Determine endpoint and parameters
+    # Always use top-headlines so queries return results on the free plan
+    url = "https://newsapi.org/v2/top-headlines"
+    params = {
+        "apiKey": newsapi_key,
+        "pageSize": count,
+        "language": "en",
+    }
     if query:
-        url = "https://newsapi.org/v2/everything"
-        params = {
-            "apiKey": newsapi_key,
-            "q": query,
-            "language": "en",
-            "sortBy": "popularity",
-            "pageSize": count,
-        }
+        params["q"] = query
     else:
-        url = "https://newsapi.org/v2/top-headlines"
-        params = {
-            "apiKey": newsapi_key,
-            "country": "us",
-            "category": category,
-            "pageSize": count,
-        }
+        params["country"] = "us"
+        params["category"] = category
 
     try:
         response = requests.get(url, params=params, timeout=10)
         response.raise_for_status()
         data = response.json()
         articles = data.get("articles", [])
+        if not articles and query:
+            # Fallback to 'everything' endpoint for more complete coverage
+            print("⚠️ No top-headlines; falling back to /everything endpoint.")
+            url = "https://newsapi.org/v2/everything"
+            params = {
+                "apiKey": newsapi_key,
+                "pageSize": count,
+                "language": "en",
+                "q": query,
+                "sortBy": "popularity",
+            }
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            articles = data.get("articles", [])
         if not articles:
-            print("⚠️ No articles returned from NewsAPI.org.")
+            print("⚠️ Still no articles found after fallback.")
             return []
 
         for article in articles:
@@ -823,15 +946,6 @@ def process_and_publish(idea, keyphrase, args):
     # Use only the clean HTML body as content
     content = body_html.lstrip("|").lstrip()
 
-    # Summary generation disabled until body parsing is fixed
-    # try:
-    #     summary_sentence = generate_summary(content)
-    #     content = f"<p><em>{summary_sentence}</em></p>\n" + content
-    # except Exception as e:
-    #     print(f"⚠️ Summary generation failed: {e}")
-
-    # Fetch all post metadata for internal linking
-    all_posts = fetch_all_posts_metadata()
     # Inject AdSense snippet before internal links
     content = inject_adsense_snippet(content)
     #content = enrich_with_internal_links(content, all_posts)
@@ -842,6 +956,11 @@ def process_and_publish(idea, keyphrase, args):
     # Skip markdown-to-HTML conversion since content is already HTML
     content = auto_convert_lists(content)
     content = convert_markdown_inline(content)
+
+    # If a custom query was specified, insert the NewsAPI example snippet
+    if args.query:
+        snippet = generate_newsapi_code_snippet(args.query)
+        content = snippet + "\n\n" + content
 
     # Append a call-to-action to excite readers
     cta_html = (
@@ -855,17 +974,26 @@ def process_and_publish(idea, keyphrase, args):
     content = re.sub(r'(\n[a-z_]+:.*)+$', '', content, flags=re.MULTILINE).strip()
 
     # --- Inline image injection and featured-image logic ---
-    prompts = extract_image_prompts_from_body(content)
-    # Limit inline images to at most two per post
-    prompts = prompts[:2]
+    # Combine front-matter inline prompts with extracted figcaptions/placeholders
+    meta_prompts = front_matter.get("inline_image_prompts", []) or []
+    extracted_prompts = extract_image_prompts_from_body(content)
+    prompts = meta_prompts + extracted_prompts
+
     if prompts:
+        # Generate and inject images for every prompt
         content = inject_inline_images(content, prompts, alt_text)
-    # Remove any leftover image placeholders
+    # Clean any leftover placeholders
     content = re.sub(r'\[IMAGE:.*?\]', '', content)
 
-    # If there are no images in the body at all, generate a featured image
+    # Always generate a hero image from hero_image_prompt, then skip featured fallback
     media_id = None
-    if '<img ' not in content:
+    hero_prompt = front_matter.get("hero_image_prompt", "")
+    if hero_prompt:
+        print("🎨 Generating hero image…")
+        img_path = generate_image(hero_prompt)
+        media_id, _ = upload_image_to_wp(img_path, alt_text)
+    elif '<img ' not in content:
+        # Fallback if no inline or hero image present
         print("🎨 Generating contextual image…")
         img_path = generate_image(image_prompt)
         media_id, _ = upload_image_to_wp(img_path, alt_text)
@@ -946,8 +1074,7 @@ def process_and_publish(idea, keyphrase, args):
                 publish_date_gmt=pub_date_gmt,
                 status=status
             )
-        # Patch SEO meta only for posts
-        update_seo_meta(result.get('id'), meta_title, meta_desc, keyphrase_final)
+        # update_seo_meta(result.get('id'), meta_title, meta_desc, keyphrase_final)  # now a no-op, handled in initial payload
         post_link = result.get('link')
     return post_link
 
@@ -956,13 +1083,23 @@ def process_and_publish(idea, keyphrase, args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--news', action='store_true', help='Fetch trending topics from News API')
-    parser.add_argument('--days', type=int, default=0, help='Range of past days for randomized publication date')
-    parser.add_argument('--page', action='store_true', help='Create pages instead of posts')
-    parser.add_argument('--idea', type=str, help='Provide a manual idea for a blog post')
-    parser.add_argument('--keyphrase', type=str, help='Optional keyphrase to pass for the post')
-    parser.add_argument('--query', type=str, help='Optional search query for News API')
-    parser.add_argument('--category', type=str, default="general", help='Optional category for News API trending topics')
-    args, unknown = parser.parse_known_args()
+    parser.add_argument('--system', action='store_true', help='Generate a post from recent system events')
+    parser.add_argument('--days', type=int, default=0, help='Backdate publish date by up to N random days')
+    parser.add_argument('--page', action='store_true', help='Upload as WordPress page instead of post')
+    parser.add_argument('--query', type=str, help='Optional query term to insert into NewsAPI example')
+
+    args = parser.parse_args()
+    tasks = []
+
+    if args.system:
+        print("✅ --system flag detected, gathering logs...")
+        system_log_text = read_system_events()
+        idea = preprocess_system_events(system_log_text)
+        print(f"🧠 Preprocessed idea: {idea}")
+        keyphrase = "system debugging"
+        link = process_and_publish(idea, keyphrase, args)
+        print(f"✅ Post published at: {link}")
+        return
 
     logging.basicConfig(
         level=logging.INFO,
@@ -973,7 +1110,7 @@ def main():
         ]
     )
 
-    tasks = []
+    
     if args.news:
         logging.info("📥 Fetching new trending topics from News API...")
         all_trends = fetch_trending_topics(count=10, category=args.category, query=args.query)
@@ -984,7 +1121,7 @@ def main():
     elif args.idea:
         tasks.append((args.idea, args.keyphrase))
     else:
-        parser.error("You must provide --idea or --news")
+        parser.error("You must provide --idea, --news, or --system")
 
     for idea, keyphrase in tasks:
         link = process_and_publish(idea, keyphrase, args)
