@@ -258,7 +258,7 @@ def generate_image(prompt, steps=STEPS_DEFAULT, scale=SCALE_DEFAULT):
     # Compute cache key
     cache_key = hashlib.sha256(prompt.encode()).hexdigest()
     os.makedirs(".cache/images", exist_ok=True)
-    output_path = os.path.join(".cache/images", f"{cache_key}.png")
+    output_path = os.path.join(".cache/images", f"{cache_key}.webp")
 
     if os.path.exists(output_path):
         print("🖼️ Cached image used:", output_path)
@@ -268,7 +268,10 @@ def generate_image(prompt, steps=STEPS_DEFAULT, scale=SCALE_DEFAULT):
     print(f"🎨 Generating image via CoreML for prompt: {prompt}")
     result = _coreml_pipe(prompt=prompt, num_inference_steps=30, guidance_scale=7.5)
     image = result.images[0]
-    image.save(output_path)
+    # Resize to smaller dimensions (e.g., 384x384)
+    image = image.resize((384, 384), Image.Resampling.LANCZOS)
+    # Save as WEBP
+    image.save(output_path, format="WEBP", quality=85)
     return output_path
 
 def upload_page(title, slug, content, media_id=None, status="publish", categories=None, tags=None, meta_desc=None):
@@ -338,7 +341,7 @@ def preprocess_system_events(raw_events: str) -> str:
 
 def upload_image_to_wp(image_path, alt_text):
     with open(image_path, 'rb') as img:
-        filename = os.path.basename(image_path)
+        filename = os.path.splitext(os.path.basename(image_path))[0] + ".webp"
         headers = {
             "Content-Disposition": f"attachment; filename={filename}"
         }
@@ -1087,6 +1090,8 @@ def main():
     parser.add_argument('--days', type=int, default=0, help='Backdate publish date by up to N random days')
     parser.add_argument('--page', action='store_true', help='Upload as WordPress page instead of post')
     parser.add_argument('--query', type=str, help='Optional query term to insert into NewsAPI example')
+    parser.add_argument('--idea', type=str, help='Idea or prompt for generating a blog post')
+    parser.add_argument('--keyphrase', type=str, default=None, help='Focus keyphrase for the blog post')
 
     args = parser.parse_args()
     tasks = []
