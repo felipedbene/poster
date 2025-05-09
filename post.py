@@ -93,13 +93,13 @@ Limit the JSON array to exactly 3 section headings.
     resp = requests.post(
         f"http://{OLLAMA_SERVER}/api/generate",
         json={
-            "model": "llama3.2:latest",
+            "model": "llama3:8b",
             "prompt": outline_prompt,
             "temperature": 0.3,
             "max_tokens": 500,
             "stream": False,
             "device": "cuda",
-        },  
+        },
         timeout=300
     )
     data = resp.json()
@@ -198,9 +198,9 @@ alt_text: ""
     meta_resp = requests.post(
         f"http://{OLLAMA_SERVER}/api/generate",
         json={
-            "model": "llama3.2:latest",
+            "model": "llama3:8b",
             "prompt": meta_prompt,
-            "temperature": 0.3,
+            "temperature": 0.5,
             "max_tokens": 300,
             "stream": False,
             "device": "cuda",
@@ -239,7 +239,7 @@ When it fits naturally(don't over use it), insert image placeholders like [IMAGE
         sec_resp = requests.post(
             f"http://{OLLAMA_SERVER}/api/generate",
             json={
-                "model": "llama3.2:latest",
+                "model": "llama3:8b",
                 "prompt": section_prompt,
                 "temperature": 0.7,
                 "max_tokens": 1200,
