@@ -1,4 +1,23 @@
 
+## [Unreleased] - 2025-05-15
+
+### Added
+- Enhanced image generation with Apple Neural Processing Unit (NPU) support via MLX Core
+- Added platform detection to automatically use optimized image generation on Apple Silicon
+- Created new `apple_utils.py` module with Apple-specific functionality
+- Added unit tests for the enhanced image generation functionality
+- Added `test_image_generation.py` script for manual testing of image generation
+- Updated requirements.txt with MLX Core and CoreML dependencies
+
+### Changed
+- Modified `generate_image()` function to use Apple NPU when available
+- Updated README.md with documentation on the new Apple NPU support
+- Implemented graceful fallback to AUTOMATIC1111 API when MLX Core is unavailable
+
+### Improved
+- Optimized image generation performance on Apple Silicon devices
+- Enhanced code organization with platform-specific utilities
+- Added comprehensive test coverage for the new functionality
 
 ## [Unreleased] - 2025-04-28
 

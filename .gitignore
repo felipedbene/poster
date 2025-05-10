@@ -8,3 +8,7 @@ __pycache__/
 .cache/
 # ignore all our test files
 *poster.yml
+ollama/*
+ml-stable-diffusion/*
+coreml-stable-diffusion-v1-5/*
+.github/

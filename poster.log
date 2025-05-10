@@ -1,12 +1,46 @@
-2025-04-28 22:48:44,777 📥 Fetching new trending topics from News API...
-2025-04-28 22:48:45,048 🌐 Retrieved 7 headlines.
-2025-04-29 21:15:40,466 ⚠️ Front-matter parse failed, skipping it
-2025-04-29 21:42:13,782 ⚠️ Front-matter parse failed, skipping it
-2025-04-29 21:42:59,327 ⚠️ Front-matter parse failed, skipping it
-2025-04-29 21:49:52,517 ⚠️ Failed to fetch page 2: 503 Server Error: Service Unavailable for url: https://debene.dev/wp-json/wp/v2/posts?per_page=100&page=2
-2025-04-29 23:17:06,644 📡 Attempting to send final healthcheck ping...
-2025-04-29 23:17:07,119 ✅ Healthcheck ping sent with status 200
-2025-04-29 23:17:07,120 📡 Healthcheck ping execution finished.
-2025-04-29 23:39:39,227 📡 Attempting to send final healthcheck ping...
-2025-04-29 23:39:39,738 ✅ Healthcheck ping sent with status 200
-2025-04-29 23:39:39,738 📡 Healthcheck ping execution finished.
+2025-05-09 19:34:28,332 Loading /Users/felipe/workspace/poster/coreml-stable-diffusion-v1-5/split_einsum/packages/split_einsum/packages/Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_text_encoder.mlpackage
+2025-05-09 19:37:15,768 Loading /Users/felipe/workspace/poster/coreml-stable-diffusion-v1-5/split_einsum/packages/Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_text_encoder.mlpackage
+2025-05-09 19:37:17,657 Done. Took 1.9 seconds.
+2025-05-09 19:37:17,657 Loading /Users/felipe/workspace/poster/coreml-stable-diffusion-v1-5/split_einsum/packages/Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_unet.mlpackage
+2025-05-09 19:38:45,489 Done. Took 87.8 seconds.
+2025-05-09 19:38:45,489 Loading a CoreML model through coremltools triggers compilation every time. The Swift package we provide uses precompiled Core ML models (.mlmodelc) to avoid compile-on-load.
+2025-05-09 19:38:45,489 Loading /Users/felipe/workspace/poster/coreml-stable-diffusion-v1-5/split_einsum/packages/Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_vae_decoder.mlpackage
+2025-05-09 19:38:50,717 Done. Took 5.2 seconds.
+2025-05-09 19:38:50,717 Loading /Users/felipe/workspace/poster/coreml-stable-diffusion-v1-5/split_einsum/packages/Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_safety_checker.mlpackage
+2025-05-09 19:38:57,925 Done. Took 7.2 seconds.
+2025-05-09 19:38:58,389 Stable Diffusion configured to generate 512x512 images
+2025-05-09 19:38:58,389 `height` and `width` dimensions (of the output image tensor) are fixed when exporting the Core ML models unless flexible shapes are used during export (https://coremltools.readme.io/docs/flexible-inputs). This pipeline was provided with Core ML models that generate {self.height}x{self.width} images (user requested {height}x{width})
+2025-05-09 19:39:07,357 Generated image has nsfw concept=False
+2025-05-09 19:39:09,539 📡 Attempting to send final healthcheck ping...
+2025-05-09 19:39:10,000 ✅ Healthcheck ping sent with status 200
+2025-05-09 19:39:10,001 📡 Healthcheck ping execution finished.
+2025-05-09 19:42:03,824 📡 Attempting to send final healthcheck ping...
+2025-05-09 19:42:04,306 ✅ Healthcheck ping sent with status 200
+2025-05-09 19:42:04,307 📡 Healthcheck ping execution finished.
+2025-05-09 19:49:25,908 Loading /Users/felipe/workspace/poster/coreml-stable-diffusion-v1-5/split_einsum/packages/Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_text_encoder.mlpackage
+2025-05-09 19:49:27,986 Done. Took 2.1 seconds.
+2025-05-09 19:49:27,987 Loading /Users/felipe/workspace/poster/coreml-stable-diffusion-v1-5/split_einsum/packages/Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_unet.mlpackage
+2025-05-09 19:51:01,311 Done. Took 93.3 seconds.
+2025-05-09 19:51:01,311 Loading a CoreML model through coremltools triggers compilation every time. The Swift package we provide uses precompiled Core ML models (.mlmodelc) to avoid compile-on-load.
+2025-05-09 19:51:01,311 Loading /Users/felipe/workspace/poster/coreml-stable-diffusion-v1-5/split_einsum/packages/Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_vae_decoder.mlpackage
+2025-05-09 19:51:06,747 Done. Took 5.4 seconds.
+2025-05-09 19:51:06,747 Loading /Users/felipe/workspace/poster/coreml-stable-diffusion-v1-5/split_einsum/packages/Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_safety_checker.mlpackage
+2025-05-09 19:51:14,265 Done. Took 7.5 seconds.
+2025-05-09 19:51:14,699 Stable Diffusion configured to generate 512x512 images
+2025-05-09 19:51:14,699 `height` and `width` dimensions (of the output image tensor) are fixed when exporting the Core ML models unless flexible shapes are used during export (https://coremltools.readme.io/docs/flexible-inputs). This pipeline was provided with Core ML models that generate {self.height}x{self.width} images (user requested {height}x{width})
+2025-05-09 19:51:23,468 Generated image has nsfw concept=False
+2025-05-09 19:51:24,352 Loading /Users/felipe/workspace/poster/coreml-stable-diffusion-v1-5/split_einsum/packages/Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_text_encoder.mlpackage
+2025-05-09 19:51:26,210 Done. Took 1.9 seconds.
+2025-05-09 19:51:26,210 Loading /Users/felipe/workspace/poster/coreml-stable-diffusion-v1-5/split_einsum/packages/Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_unet.mlpackage
+2025-05-09 19:52:55,132 Done. Took 88.9 seconds.
+2025-05-09 19:52:55,132 Loading a CoreML model through coremltools triggers compilation every time. The Swift package we provide uses precompiled Core ML models (.mlmodelc) to avoid compile-on-load.
+2025-05-09 19:52:55,132 Loading /Users/felipe/workspace/poster/coreml-stable-diffusion-v1-5/split_einsum/packages/Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_vae_decoder.mlpackage
+2025-05-09 19:53:00,573 Done. Took 5.4 seconds.
+2025-05-09 19:53:00,573 Loading /Users/felipe/workspace/poster/coreml-stable-diffusion-v1-5/split_einsum/packages/Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_safety_checker.mlpackage
+2025-05-09 19:53:07,845 Done. Took 7.3 seconds.
+2025-05-09 19:53:08,210 Stable Diffusion configured to generate 512x512 images
+2025-05-09 19:53:08,210 `height` and `width` dimensions (of the output image tensor) are fixed when exporting the Core ML models unless flexible shapes are used during export (https://coremltools.readme.io/docs/flexible-inputs). This pipeline was provided with Core ML models that generate {self.height}x{self.width} images (user requested {height}x{width})
+2025-05-09 19:53:16,869 Generated image has nsfw concept=False
+2025-05-09 19:53:21,433 📡 Attempting to send final healthcheck ping...
+2025-05-09 19:53:21,931 ✅ Healthcheck ping sent with status 200
+2025-05-09 19:53:21,932 📡 Healthcheck ping execution finished.

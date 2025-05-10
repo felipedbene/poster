@@ -1,0 +1,28 @@
+def clean_llm_output(text):
+    """
+    Clean up LLM-generated text by removing common artifacts and response phrases.
+    """
+    # Remove any triple backticks
+    text = re.sub(r'```(?:yaml|)\s*', '', text)
+    text = re.sub(r'```', '', text)
+    
+    # Remove common LLM response phrases
+    phrases_to_remove = [
+        "I hope this helps!",
+        "Let me know if you need any further assistance.",
+        "Feel free to ask if you have any questions.",
+        "Hope this helps!",
+        "Let me know if you need anything else.",
+        "Here is the YAML",
+        "Here's the YAML",
+        "Here is a YAML",
+        "Here's a YAML"
+    ]
+    
+    for phrase in phrases_to_remove:
+        text = text.replace(phrase, '')
+    
+    # Remove any extra newlines that might have been created
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    
+    return text
