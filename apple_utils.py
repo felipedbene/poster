@@ -104,22 +104,18 @@ def generate_image_with_mlx(prompt: str,
         from python_coreml_stable_diffusion.coreml_model import CoreMLModel, get_available_compute_units
         from diffusers import PNDMScheduler
         from transformers import CLIPTokenizer, CLIPFeatureExtractor
-        
-        # Get the CoreML model path
-        model_path = get_coreml_model_path()
-        print(f"🔍 Using CoreML model from: {model_path}")
-        
-        # Check if the model directory exists
-        if not os.path.exists(model_path):
-            print(f"❌ CoreML model directory not found: {model_path}")
-            return None
-            
-        # Check for model files
-        text_encoder_path = os.path.join(model_path, "Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_text_encoder.mlpackage")
-        unet_path = os.path.join(model_path, "Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_unet.mlpackage")
-        vae_decoder_path = os.path.join(model_path, "Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_vae_decoder.mlpackage")
-        safety_checker_path = os.path.join(model_path, "Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_safety_checker.mlpackage")
-        
+               
+
+        # Get the actual packages directory (already includes split_einsum/packages)
+        packages_dir = get_coreml_model_path()
+        print(f"🔍 Using CoreML model packages from: {packages_dir}")
+
+        # Load individual models with compute_unit parameter
+        text_encoder_path   = os.path.join(packages_dir, "Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_text_encoder.mlpackage")
+        unet_path           = os.path.join(packages_dir, "Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_unet.mlpackage")
+        vae_decoder_path    = os.path.join(packages_dir, "Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_vae_decoder.mlpackage")
+        safety_checker_path = os.path.join(packages_dir, "Stable_Diffusion_version_runwayml_stable-diffusion-v1-5_safety_checker.mlpackage")
+
         # Verify model files exist
         if not os.path.exists(text_encoder_path) or not os.path.exists(unet_path) or not os.path.exists(vae_decoder_path):
             print(f"❌ Required CoreML model files not found in {model_path}")

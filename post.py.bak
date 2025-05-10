@@ -1,0 +1,107 @@
+import os
+import sys
+import argparse
+import requests
+import hashlib
+import json
+import datetime
+import random
+import re
+import logging
+import time
+import platform
+from dotenv import load_dotenv
+from markdown.extensions.fenced_code import FencedCodeExtension
+from markdown.extensions.codehilite import CodeHiliteExtension
+import yaml
+from typing import Tuple, Dict, Optional
+import frontmatter
+from PIL import Image
+from io import BytesIO
+import base64
+
+# Import Apple-specific utilities
+from apple_utils import is_apple_silicon, generate_image_with_mlx
+# Import Ollama utilities
+from ollama_utils import get_ollama_endpoint, generate_text_with_ollama, generate_image_with_ollama
+
+# Load .env, overriding existing environment variables
+load_dotenv(override=True)
+
+# Define global variables from environment
+WP_USER = os.getenv("WORDPRESS_USERNAME")
+WP_PASS = os.getenv("WORDPRESS_APP_PASSWORD")
+WP_URL  = os.getenv("WORDPRESS_URL")
+HC_APIKEY     = os.getenv("HC_APIKEY")
+SD_API_BASE   = os.getenv("SD_API_URL")
+OLLAMA_SERVER = os.getenv("OLLAMA_SERVER")
+NEWSAPI_KEY   = os.getenv("NEWSAPI_KEY")
+
+def _strip_frontmatter(text):
+    """
+    Strip YAML front matter from text.
+    """
+    pattern = r'^\s*---\s*\n.*?\n---\s*\n'
+    return re.sub(pattern, '', text, flags=re.DOTALL)
+
+def _parse_yaml_safely(yaml_content, topic):
+    """
+    Parse YAML content safely, handling special characters and replacing placeholders.
+    """
+    # Replace placeholders in the YAML content
+    yaml_content = yaml_content.replace("{topic}", topic)
+    
+    # Handle colons in titles by quoting them
+    lines = yaml_content.split('\n')
+    for i, line in enumerate(lines):
+        if line.startswith('title:') or line.startswith('meta_title:'):
+            # Check if the value is already quoted
+            if not ('"' in line or "'" in line):
+                # Add quotes around the value
+                parts = line.split(':', 1)
+                if len(parts) > 1:
+                    lines[i] = f"{parts[0]}: \"{parts[1].strip()}\""
+    
+    # Rejoin the lines
+    yaml_content = '\n'.join(lines)
+    
+    # Parse the YAML
+    return yaml.safe_load(yaml_content)
+
+def clean_llm_output(text, topic=None):
+    """
+    Clean up LLM-generated text by removing common artifacts and response phrases.
+    """
+    # Remove any triple backticks
+    text = re.sub(r'```(?:yaml|)\s*', '', text)
+    text = re.sub(r'```', '', text)
+    
+    # Remove common LLM response phrases
+    phrases_to_remove = [
+        "I hope this helps!",
+        "Let me know if you need any further assistance.",
+        "Feel free to ask if you have any questions.",
+        "Hope this helps!",
+        "Let me know if you need anything else.",
+        "Here is the YAML",
+        "Here's the YAML",
+        "Here is a YAML",
+        "Here's a YAML",
+        "I hope this meets your requirements!",
+        "front-matter with thoughtful field values:",
+        "Here is the YAML front-matter",
+        "Here's the YAML front-matter"
+    ]
+    
+    for phrase in phrases_to_remove:
+        text = text.replace(phrase, '')
+    
+    # Remove any extra newlines that might have been created
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    
+    # Replace placeholders with actual topic if provided
+    if topic:
+        text = text.replace("[Topic]", topic)
+        text = text.replace("[topic]", topic)
+    
+    return text
