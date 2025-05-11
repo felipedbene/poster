@@ -81,6 +81,7 @@ def list_available_models() -> List[str]:
         response.raise_for_status()
         data = response.json()
         models = [model["name"] for model in data.get("models", [])]
+        print(models)
         return models
     except Exception as e:
         print(f"⚠️ Failed to list Ollama models: {e}")
@@ -88,7 +89,7 @@ def list_available_models() -> List[str]:
 
 def generate_text_with_ollama(
     prompt: str,
-    model: str = "llama3:8b",
+    model: str = "mistral:7b-instruct",
     temperature: float = 0.7,
     max_tokens: int = 1000,
     stream: bool = False,

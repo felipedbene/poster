@@ -85,9 +85,9 @@ def generate_image_with_mlx(prompt: str,
         base_prompt = prompt.strip()
         if not base_prompt.lower().startswith("a "):
             base_prompt = "A " + base_prompt
-        # Append artisan-style modifiers for hand-crafted illustration
-        enhanced_prompt = base_prompt + ", artisan hand-crafted style, watercolor textures, fine details, soft natural lighting"
-        print(f"🎨 Final artisan prompt for MLX Core: {enhanced_prompt}")
+        # Add tech-focused style modifiers
+        enhanced_prompt = base_prompt + ", ultra-realistic, high-tech, cyberpunk, neon, holographic, futuristic, digital, neural, quantum, AI, robotic, synthetic, ultra-modern, technological, innovative, cutting-edge, 8k, photorealistic, detailed, sharp focus"
+        print(f"🎨 Final tech prompt for MLX Core: {enhanced_prompt}")
         
         # Create cache directory and check for cached image
         os.makedirs(".cache/images", exist_ok=True)
