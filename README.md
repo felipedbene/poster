@@ -4,7 +4,7 @@ Automatically generate, publish, and update SEO-optimized blog posts to WordPres
 
 ## Overview
 
-**Trend Poster** continuously fetches trending headlines (via GNews), uses OpenAI to generate:
+**Trend Poster** continuously fetches trending headlines using NewsAPI and uses OpenAI to generate:
 - Titles, meta descriptions, and keyphrases
 - Full HTML blog posts (1000+ words)
 - Featured image prompts (and auto-generated DALL·E images)
@@ -19,12 +19,32 @@ The system now features enhanced image generation capabilities:
 - **Fallback Mechanism**: Gracefully falls back to AUTOMATIC1111 API if other methods are unavailable
 - **Consistent Output**: Maintains the same high-quality image output regardless of the generation method used
 
+### Code Flow
+
+```mermaid
+flowchart TD
+    A[Start] --> B{Topic Source}
+    B -->|--idea| C[Generate blog components]
+    B -->|Trending headlines| D[Fetch trends]
+    D --> C
+    C --> E[Write sections with Ollama]
+    E --> F{Generate images?}
+    F -->|Apple NPU| G[MLX Core]
+    F -->|Local Ollama| H[Ollama diffusion]
+    F -->|Fallback| I[AUTOMATIC1111]
+    G --> J[Upload images]
+    H --> J
+    I --> J
+    J --> K[Publish to WordPress]
+    K --> L[Done]
+```
+
 ## Assumptions
 
 - A **WordPress** site with REST API enabled
 - An **Application Password** for your WP user
 - **Yoast SEO** plugin (for meta patching)
-- A **GNews API key**
+- A **NewsAPI key**
 - An **OpenAI** account with `chat-completions` and `images-generations` access
 - Python 3.9+
 - For Apple NPU support: Apple Silicon Mac with MLX Core and CoreML dependencies installed
@@ -43,29 +63,27 @@ The system now features enhanced image generation capabilities:
    pip install -r requirements.txt
    ```
 
-3. **Create a `.env` file** with WordPress, OpenAI, GNews, and Redis configuration:
+3. **Create a `.env` file** with WordPress, OpenAI, and NewsAPI configuration:
    ```ini
    WORDPRESS_URL=https://your-blog.com
    WORDPRESS_USERNAME=your_wp_user
-   WORDPRESS_APP_PASSWORD=your_app_password
-   OPENAI_API_KEY=sk-...
-   GNEWS_API_KEY=your_gnews_key
-   REDIS_HOST=redis-master.wp.svc.cluster.local # This is namespace dependant
-   REDIS_PASSWORD=your_redis_password  # Only if Redis auth is enabled
-   SD_API_URL=http://automatic1111:7860  # URL for AUTOMATIC1111 API
-   OLLAMA_SERVER=ollama-service:11434  # Optional: Remote Ollama server (if local not available)
+WORDPRESS_APP_PASSWORD=your_app_password
+OPENAI_API_KEY=sk-...
+NEWSAPI_KEY=your_newsapi_key
+SD_API_URL=http://automatic1111:7860  # URL for AUTOMATIC1111 API
+OLLAMA_SERVER=ollama-service:11434  # Optional: Remote Ollama server (if local not available)
    ```
-   Ensure your environment (e.g., `poster-env`) contains these variables for Redis integration.
+    Ensure your environment (e.g., `poster-env`) contains these variables loaded.
 
 ## Usage
 
+### Kubernetes Job
 ```bash
-# Manually trigger a one-time CronJob execution:
+# Manually trigger a one-time CronJob execution
 kubectl create job --from=cronjob/trend-poster trend-poster-now -n wp
 kubectl logs -n wp job/trend-poster-now -f
 ```
 
-**Note:** Redis is used to deduplicate headlines for 24 hours to avoid reposting the same content.
 
 ### Example logs:
 ```text
@@ -76,24 +94,12 @@ kubectl logs -n wp job/trend-poster-now -f
 🎉 Job completed successfully
 ```
 
-### Testing Image Generation
 
-To test the enhanced image generation with Apple NPU support:
-
-```bash
-python test_image_generation.py --prompt "A beautiful mountain landscape at sunset"
-```
-
-To force using AUTOMATIC1111 API even on Apple hardware or with local Ollama:
+## Running Locally
+Generate a blog post with your own topic:
 
 ```bash
-python test_image_generation.py --prompt "A beautiful mountain landscape at sunset" --force-automatic
-```
-
-To force using local Ollama even on Apple hardware (if local Ollama is available):
-
-```bash
-python test_image_generation.py --prompt "A beautiful mountain landscape at sunset" --force-ollama
+python post.py --idea "Amazing new tech" --keyphrase "latest tech trends"
 ```
 
 ## Features
@@ -107,11 +113,6 @@ python test_image_generation.py --prompt "A beautiful mountain landscape at suns
 
 ## Development & Debugging
 
-To test OpenAI manually:
-```bash
-python test_openai.py
-```
-
 To clear caches:
 ```bash
 rm -rf .cache/
@@ -120,3 +121,4 @@ rm -rf .cache/
 ## License
 
 MIT © Felipe De Bene
+
