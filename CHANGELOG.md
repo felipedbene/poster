@@ -10,9 +10,9 @@
 - Updated requirements.txt with MLX Core and CoreML dependencies
 
 ### Changed
-- Modified `generate_image()` function to use Apple NPU when available
-- Updated README.md with documentation on the new Apple NPU support
-- Implemented graceful fallback to AUTOMATIC1111 API when MLX Core is unavailable
+- Modified `generate_image()` to rely solely on the Apple NPU
+- Simplified blog generation to a single Mistral call on the NPU
+- Updated README.md to reflect the streamlined flow
 
 ### Improved
 - Optimized image generation performance on Apple Silicon devices
