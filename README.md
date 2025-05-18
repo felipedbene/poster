@@ -13,11 +13,9 @@ Automatically generate, publish, and update SEO-optimized blog posts to WordPres
 
 ### Enhanced Image Generation
 
-The system now features enhanced image generation capabilities:
-- **Apple Silicon Support**: Automatically detects Apple hardware and uses the Neural Processing Unit (NPU) via MLX Core for faster, more efficient image generation
-- **Local Ollama Support**: Automatically detects and uses local Ollama installation with diffusion models if available
-- **Fallback Mechanism**: Gracefully falls back to AUTOMATIC1111 API if other methods are unavailable
-- **Consistent Output**: Maintains the same high-quality image output regardless of the generation method used
+The system now generates both text and images directly on Apple Silicon hardware:
+- **Apple Silicon Support**: Uses the Neural Processing Unit (NPU) via MLX Core for fast image generation
+- **Mistral LLM**: Blog posts are produced in a single call to the local Mistral model running on the NPU
 
 ### Code Flow
 
@@ -27,14 +25,10 @@ flowchart TD
     B -->|--idea| C[Generate blog components]
     B -->|Trending headlines| D[Fetch trends]
     D --> C
-    C --> E[Write sections with Ollama]
+    C --> E[Generate post with Mistral]
     E --> F{Generate images?}
-    F -->|Apple NPU| G[MLX Core]
-    F -->|Local Ollama| H[Ollama diffusion]
-    F -->|Fallback| I[AUTOMATIC1111]
+    F --> G[MLX Core]
     G --> J[Upload images]
-    H --> J
-    I --> J
     J --> K[Publish to WordPress]
     K --> L[Done]
 ```
@@ -109,7 +103,7 @@ python post.py --idea "Amazing new tech" --keyphrase "latest tech trends"
 - 🧠 Logs to both `poster.log` and stdout (Kubernetes friendly)
 - 🌐 Fully async-compatible design
 - 🍎 Optimized image generation on Apple Silicon using the Neural Processing Unit (NPU)
-- 🦙 Support for local Ollama for both text and image generation
+- ✍️ Text generation uses the Mistral model running locally on the Apple NPU
 
 ## Development & Debugging
 
