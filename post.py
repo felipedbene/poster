@@ -158,13 +158,18 @@ def clean_llm_output(text, topic=None):
     return text
 
 
-def generate_blog_components(topic):
-    """Generate an entire blog post in a single LLM call."""
+def generate_blog_components(topic, refresh: bool = False):
+    """Generate an entire blog post in a single LLM call.
+
+    Args:
+        topic (str): The topic for the post.
+        refresh (bool): If True, ignore cached content.
+    """
     os.makedirs(".cache/posts", exist_ok=True)
     cache_key = hashlib.sha256(topic.encode()).hexdigest()
     cache_path = f".cache/posts/{cache_key}.yaml"
 
-    if os.path.exists(cache_path):
+    if not refresh and os.path.exists(cache_path):
         with open(cache_path, "r") as f:
             cached = f.read()
         print(f"💾 Cached blog retrieved for: {topic}")
@@ -219,7 +224,13 @@ Return the entire output as a single Markdown file, and nothing else."""
 
 
 def generate_image(
-    prompt, negative_prompt="", width=512, height=512, steps=30, seed=None
+    prompt,
+    negative_prompt="",
+    width=512,
+    height=512,
+    steps=30,
+    seed=None,
+    refresh: bool = False,
 ):
     """
     Generate an image based on a text prompt.
@@ -237,12 +248,13 @@ def generate_image(
     # Check if the cache file exists
     png_path = f".cache/images/{cache_key}.png"
     webp_path = f".cache/images/{cache_key}.webp"
-    if os.path.exists(webp_path):
-        print("🖼️ Cached WebP image used")
-        return webp_path
-    elif os.path.exists(png_path):
-        print("🖼️ Cached PNG image used")
-        return png_path
+    if not refresh:
+        if os.path.exists(webp_path):
+            print("🖼️ Cached WebP image used")
+            return webp_path
+        elif os.path.exists(png_path):
+            print("🖼️ Cached PNG image used")
+            return png_path
 
     if is_apple_silicon():
         try:
@@ -254,6 +266,7 @@ def generate_image(
                 height=height,
                 steps=steps,
                 seed=seed,
+                refresh=refresh,
             )
             if image_path:
                 return image_path
@@ -399,6 +412,11 @@ def main():
     parser.add_argument(
         "--no-images", action="store_true", help="Skip image generation"
     )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Ignore caches and generate new content",
+    )
     args = parser.parse_args()
 
     if not args.idea:
@@ -407,7 +425,7 @@ def main():
 
     # Generate blog components
     print(f"🖋️ Generating blog post for topic: {args.idea}")
-    blog_content = generate_blog_components(args.idea)
+    blog_content = generate_blog_components(args.idea, refresh=args.refresh)
 
     # Extract YAML front matter
     try:
@@ -419,7 +437,7 @@ def main():
         if not args.no_images and "hero_image_prompt" in metadata:
             hero_prompt = metadata["hero_image_prompt"]
             print(f"🖼️ Generating hero image with prompt: {hero_prompt}")
-            image_path = generate_image(hero_prompt)
+            image_path = generate_image(hero_prompt, refresh=args.refresh)
             if image_path:
                 print(f"✅ Hero image generated: {image_path}")
             else:
@@ -435,7 +453,7 @@ def main():
             # Upload any inline images if needed
             if not args.no_images and "inline_image_prompts" in metadata:
                 for i, prompt in enumerate(metadata.get("inline_image_prompts", [])):
-                    image_path = generate_image(prompt)
+                    image_path = generate_image(prompt, refresh=args.refresh)
                     if image_path:
                         image_id, image_url = upload_image_to_wordpress(image_path)
                         if image_id and image_url:
