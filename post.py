@@ -44,10 +44,8 @@ LLM_MODEL = os.getenv("MLX_LLM_MODEL", "mistralai/Mistral-7B-Instruct-v0.2")
 
 
 def _strip_frontmatter(text):
-    """
-    Strip YAML front matter from text.
-    """
-    pattern = r"^\s*---\s*\n.*?\n---\s*\n"
+    """Strip YAML front matter from text even if the closing marker is missing."""
+    pattern = r"^\s*---\s*\n.*?(?:\n---\s*\n|$)"
     return re.sub(pattern, "", text, flags=re.DOTALL)
 
 
