@@ -150,8 +150,27 @@ def generate_blog_components(topic):
         return cached
 
     prompt = f"""
-Write a witty blog post about "{topic}" in Markdown. Format the output as a single file using YAML frontmatter: begin with `---`, include title, meta_title, meta_desc, slug, keyphrase, hero_image_prompt, inline_image_prompts, and alt_text, then close with `---`. After the frontmatter, write the article in exactly three sections using a sarcastic tone.
-"""
+Write a comprehensive, informative blog post about "{topic}" with a professional yet engaging tone. Output the result as a single Markdown file.
+
+Start with a Hugo/Jekyll-style frontmatter block using `---`. Include the following fields:
+- `title`: an attention-grabbing, SEO-friendly title related to the topic
+- `meta_title`: a concise and click-worthy meta title (under 60 characters)
+- `meta_desc`: a compelling meta description that encourages clicks (under 155 characters)
+- `slug`: a URL-safe version of the title
+- `keyphrase`: the main SEO keyword or phrase
+- `hero_image_prompt`: a detailed prompt for an image that captures the essence of the article
+- `inline_image_prompts`: a list of 2 prompts for supporting images that illustrate key points
+- `alt_text`: accessible alt text describing the hero image
+
+After the frontmatter, write a well-structured blog post with at least 1000 words. Include:
+1. An engaging introduction that hooks the reader
+2. At least three main sections with descriptive headings
+3. Practical examples, tips, or actionable advice
+4. A conclusion that summarizes key points and provides next steps
+
+Use a professional but conversational tone throughout. Include relevant statistics, examples, and insights where appropriate. Format the content with proper Markdown, including lists, bold text for emphasis, and code blocks if relevant.
+
+Return the entire output as a single Markdown file, and nothing else."""
 
     if load_model is None or generate_llm is None:
         raise RuntimeError("mlx.lm is required for text generation")
