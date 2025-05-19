@@ -14,6 +14,7 @@ import inspect
 from dotenv import load_dotenv
 from markdown.extensions.fenced_code import FencedCodeExtension
 from markdown.extensions.codehilite import CodeHiliteExtension
+from markdown import markdown
 import yaml
 from typing import Tuple, Dict, Optional
 import frontmatter
@@ -225,9 +226,7 @@ def generate_image(
 
 
 def upload_image_to_wordpress(image_path):
-    """
-    Upload an image to WordPress and return the media ID.
-    """
+    """Upload an image to WordPress and return its ID and URL."""
     if not os.path.exists(image_path):
         print(f"❌ Image file not found: {image_path}")
         return None
@@ -250,15 +249,16 @@ def upload_image_to_wordpress(image_path):
         )
 
         if response.status_code in (201, 200):
-            return response.json().get("id")
+            data = response.json()
+            return data.get("id"), data.get("source_url")
         else:
             print(
                 f"❌ Failed to upload image: {response.status_code} - {response.text}"
             )
-            return None
+            return None, None
     except Exception as e:
         print(f"❌ Error uploading image: {e}")
-        return None
+        return None, None
 
 
 def create_or_update_post(post_data):
@@ -383,19 +383,23 @@ def main():
                 for i, prompt in enumerate(metadata.get("inline_image_prompts", [])):
                     image_path = generate_image(prompt)
                     if image_path:
-                        # Upload image to WordPress
-                        image_id = upload_image_to_wordpress(image_path)
-                        if image_id:
-                            # Replace placeholder with image
+                        image_id, image_url = upload_image_to_wordpress(image_path)
+                        if image_id and image_url:
                             placeholder = f"[IMAGE: {prompt}]"
                             if placeholder in content:
                                 content = content.replace(
                                     placeholder,
-                                    f'<figure><img src="{WP_URL}/wp-content/uploads/{os.path.basename(image_path)}" alt="{metadata.get("alt_text", "Alternative text descriptions for the images in this tutorial")}"/><figcaption>{prompt}</figcaption></figure>',
+                                    f'<figure><img src="{image_url}" alt="{metadata.get("alt_text", "Alternative text descriptions for the images in this tutorial")}"/><figcaption>{prompt}</figcaption></figure>',
                                 )
 
             # Add footer
             content += '\n<p><strong>Ready to dive deeper?</strong> Check out <a href="https://github.com/felipedbene" target="_blank">my GitHub</a> for more code examples and in-depth tutorials!</p>'
+
+            # Convert Markdown to HTML for WordPress
+            content = markdown(
+                content,
+                extensions=[FencedCodeExtension(), CodeHiliteExtension()],
+            )
 
             # Prepare post data
             post_data = {
@@ -413,7 +417,7 @@ def main():
 
             # Upload hero image if available
             if not args.no_images and "hero_image_prompt" in metadata and image_path:
-                image_id = upload_image_to_wordpress(image_path)
+                image_id, _ = upload_image_to_wordpress(image_path)
                 if image_id:
                     post_data["featured_media"] = image_id
 
