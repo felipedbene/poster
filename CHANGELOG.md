@@ -6,6 +6,10 @@
 - Removed references to AUTOMATIC1111 and other non-Apple AI services
 - Updated README and requirements to reflect the simplified workflow
 
+### Fixed
+- Prevented crashes when newer and older versions of `mlx_lm` use
+  different argument names for temperature during text generation
+
 ## [Unreleased] - 2025-05-15
 
 ### Added
