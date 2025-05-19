@@ -1,13 +1,13 @@
 # Trend Poster
 
-Automatically generate, publish, and update SEO-optimized blog posts to WordPress based on trending headlines — powered by OpenAI and the WP REST API.
+Automatically generate, publish, and update SEO-optimized blog posts to WordPress based on trending headlines — powered by `mlx.llm` and the WP REST API.
 
 ## Overview
 
-**Trend Poster** continuously fetches trending headlines using NewsAPI and uses OpenAI to generate:
+**Trend Poster** continuously fetches trending headlines using NewsAPI and uses the `mlx.llm` model to generate:
 - Titles, meta descriptions, and keyphrases
 - Full HTML blog posts (1000+ words)
-- Featured image prompts (and auto-generated DALL·E images)
+- Featured image prompts (and auto-generated images)
 - SEO metadata integration (Yoast-compatible)
 - Seamless updates of existing posts (via slug detection)
 
@@ -39,10 +39,8 @@ flowchart TD
 - An **Application Password** for your WP user
 - **Yoast SEO** plugin (for meta patching)
 - A **NewsAPI key**
-- An **OpenAI** account with `chat-completions` and `images-generations` access
-- Python 3.9+
-- For Apple NPU support: Apple Silicon Mac with MLX Core and CoreML dependencies installed
-- For local Ollama support: Ollama installed with LLM models (llama3:8b) and optionally diffusion models (sdxl:latest)
+- Python 3.11+
+- For Apple NPU support: Apple Silicon Mac with MLX Core, CoreML dependencies, and the `mlx.llm` package installed
 
 ## Getting Started
 
@@ -57,15 +55,13 @@ flowchart TD
    pip install -r requirements.txt
    ```
 
-3. **Create a `.env` file** with WordPress, OpenAI, and NewsAPI configuration:
+3. **Create a `.env` file** with WordPress and NewsAPI configuration:
    ```ini
    WORDPRESS_URL=https://your-blog.com
    WORDPRESS_USERNAME=your_wp_user
 WORDPRESS_APP_PASSWORD=your_app_password
-OPENAI_API_KEY=sk-...
 NEWSAPI_KEY=your_newsapi_key
-SD_API_URL=http://automatic1111:7860  # URL for AUTOMATIC1111 API
-OLLAMA_SERVER=ollama-service:11434  # Optional: Remote Ollama server (if local not available)
+MLX_LLM_MODEL=mistralai/Mistral-7B-Instruct-v0.2
    ```
     Ensure your environment (e.g., `poster-env`) contains these variables loaded.
 
@@ -103,7 +99,7 @@ python post.py --idea "Amazing new tech" --keyphrase "latest tech trends"
 - 🧠 Logs to both `poster.log` and stdout (Kubernetes friendly)
 - 🌐 Fully async-compatible design
 - 🍎 Optimized image generation on Apple Silicon using the Neural Processing Unit (NPU)
-- ✍️ Text generation uses the Mistral model running locally on the Apple NPU
+- ✍️ Text generation powered by the `mlx.llm` API running locally on the Apple NPU
 
 ## Development & Debugging
 

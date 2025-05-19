@@ -23,12 +23,11 @@ import base64
 # Import Apple-specific utilities
 from apple_utils import is_apple_silicon, generate_image_with_mlx
 
-# Import Ollama utilities
-from ollama_utils import (
-    get_ollama_endpoint,
-    generate_text_with_ollama,
-    generate_image_with_ollama,
-)
+# mlx.llm for local model inference
+try:
+    from mlx_lm import load as load_model, generate as generate_llm
+except ImportError:  # pragma: no cover - runtime environment may not have mlx_lm
+    load_model = generate_llm = None
 
 # Load .env, overriding existing environment variables
 load_dotenv(override=True)
@@ -38,9 +37,8 @@ WP_USER = os.getenv("WORDPRESS_USERNAME")
 WP_PASS = os.getenv("WORDPRESS_APP_PASSWORD")
 WP_URL = os.getenv("WORDPRESS_URL")
 HC_APIKEY = os.getenv("HC_APIKEY")
-SD_API_BASE = os.getenv("SD_API_URL")
-OLLAMA_SERVER = os.getenv("OLLAMA_SERVER")
 NEWSAPI_KEY = os.getenv("NEWSAPI_KEY")
+LLM_MODEL = os.getenv("MLX_LLM_MODEL", "mistralai/Mistral-7B-Instruct-v0.2")
 
 
 def _strip_frontmatter(text):
@@ -153,16 +151,18 @@ def generate_blog_components(topic):
 Write a witty markdown blog post about "{topic}". Begin with YAML front matter fenced by triple dashes containing: title, meta_title, meta_desc, slug, keyphrase, hero_image_prompt, inline_image_prompts, and alt_text. After the front matter, write the article in exactly three sections. Use a sarcastic tone throughout.
 """
 
-    response = generate_text_with_ollama(
-        prompt=prompt,
-        model="mistral:7b",
-        temperature=0.6,
-        max_tokens=1800,
-        stream=False,
-        device="metal",
-    )
+    if load_model is None or generate_llm is None:
+        raise RuntimeError("mlx.lm is required for text generation")
 
-    text = response.get("response", "").strip()
+    model, tokenizer = load_model(LLM_MODEL)
+    text = generate_llm(
+        model,
+        tokenizer,
+        prompt,
+        max_tokens=1800,
+        temperature=0.6,
+        verbose=False,
+    ).strip()
     with open(cache_path, "w") as f:
         f.write(text)
     return text
