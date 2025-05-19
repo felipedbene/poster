@@ -335,13 +335,27 @@ def update_seo_metadata(post_id, seo_data):
         }
 
         # Update SEO metadata
+        endpoint = f"{WP_URL}/wp-json/yoast/v1/update_meta"
         response = requests.post(
-            f"{WP_URL}/wp-json/yoast/v1/update_meta",
+            endpoint,
             headers=headers,
             json={"post_id": post_id, "data": seo_data},
         )
 
-        if response.status_code != 200:
+        if response.status_code == 404:
+            # Some Yoast SEO setups use a hyphen instead of an underscore
+            alt_endpoint = f"{WP_URL}/wp-json/yoast/v1/update-meta"
+            alt_response = requests.post(
+                alt_endpoint,
+                headers=headers,
+                json={"post_id": post_id, "data": seo_data},
+            )
+
+            if alt_response.status_code != 200:
+                print(
+                    f"⚠️ Failed to update SEO metadata: {alt_response.status_code} - {alt_response.text}"
+                )
+        elif response.status_code != 200:
             print(
                 f"⚠️ Failed to update SEO metadata: {response.status_code} - {response.text}"
             )
