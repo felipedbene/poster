@@ -99,9 +99,12 @@ def generate_image_with_mlx(
         if not base_prompt.lower().startswith("a "):
             base_prompt = "A " + base_prompt
         # Add tech-focused style modifiers
-        enhanced_prompt = base_prompt + ", ultra-realistic, high-tech, cyberpunk, neon, holographic, futuristic, digital, neural, quantum, AI, robotic, synthetic, ultra-modern, technological, innovative, cutting-edge, 8k, photorealistic, detailed, sharp focus"
+        enhanced_prompt = (
+            base_prompt
+            + ", ultra-realistic, high-tech, cyberpunk, neon, holographic, futuristic, digital, neural, quantum, AI, robotic, synthetic, ultra-modern, technological, innovative, cutting-edge, 8k, photorealistic, detailed, sharp focus"
+        )
         print(f"🎨 Final tech prompt for MLX Core: {enhanced_prompt}")
-        
+
         # Create cache directory and check for cached image
         os.makedirs(".cache/images", exist_ok=True)
         cache_key = hashlib.sha256(enhanced_prompt.encode()).hexdigest()
@@ -191,6 +194,20 @@ def generate_image_with_mlx(
             neg_tokens = tokenizer.encode(negative_prompt)
             if len(neg_tokens) > max_len:
                 neg_tokens = neg_tokens[:max_len]
+                negative_prompt = tokenizer.decode(neg_tokens, skip_special_tokens=True)
+
+            # Ensure prompt and negative prompt have matching lengths
+            if len(prompt_tokens) != len(neg_tokens):
+                pad_token = tokenizer.pad_token_id or tokenizer.eos_token_id
+                if len(prompt_tokens) > len(neg_tokens):
+                    neg_tokens += [pad_token] * (len(prompt_tokens) - len(neg_tokens))
+                else:
+                    prompt_tokens += [pad_token] * (
+                        len(neg_tokens) - len(prompt_tokens)
+                    )
+                enhanced_prompt = tokenizer.decode(
+                    prompt_tokens, skip_special_tokens=True
+                )
                 negative_prompt = tokenizer.decode(neg_tokens, skip_special_tokens=True)
 
             # Initialize the pipeline with the correct parameters
