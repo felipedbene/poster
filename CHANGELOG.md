@@ -5,6 +5,7 @@
 - Replaced Ollama-based text generation with the `mlx.llm` API
 - Removed references to AUTOMATIC1111 and other non-Apple AI services
 - Updated README and requirements to reflect the simplified workflow
+- Generation prompt now explicitly requests a **Frontmatter** formatted post
 
 ### Fixed
 - Prevented crashes when newer and older versions of `mlx_lm` use
