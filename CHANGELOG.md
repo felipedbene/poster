@@ -1,4 +1,11 @@
 
+## [Unreleased] - 2025-05-16
+
+### Changed
+- Replaced Ollama-based text generation with the `mlx.llm` API
+- Removed references to AUTOMATIC1111 and other non-Apple AI services
+- Updated README and requirements to reflect the simplified workflow
+
 ## [Unreleased] - 2025-05-15
 
 ### Added

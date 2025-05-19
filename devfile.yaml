@@ -15,4 +15,4 @@ commands:
   - id: test
     exec:
       component: dev
-      commandLine: "python -m unittest test_image_generation_unit.py test_ollama_utils.py"
+      commandLine: "python -m unittest test_image_generation_unit.py"
