@@ -15,7 +15,6 @@ markdown==3.8
 mlx>=0.0.5
 mlx-core>=0.0.3
 numpy==2.2.5
-openai==1.75.0
 pandas==2.2.3
 pillow==11.2.1
 platform-detect>=0.1.0
