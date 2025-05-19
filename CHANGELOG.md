@@ -9,6 +9,8 @@
 ### Fixed
 - Prevented crashes when newer and older versions of `mlx_lm` use
   different argument names for temperature during text generation
+- Converted Markdown output to HTML before publishing to WordPress
+- Inserted inline images using the URL returned from the media upload endpoint
 
 ## [Unreleased] - 2025-05-15
 
