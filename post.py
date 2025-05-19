@@ -98,6 +98,27 @@ def _parse_yaml_safely(yaml_content, topic):
         }
 
 
+def safe_frontmatter_loads(text: str, topic: str) -> frontmatter.Post:
+    """Load front matter safely, falling back to best-effort parsing."""
+    try:
+        return frontmatter.loads(text)
+    except Exception as e:  # pragma: no cover - depends on LLM output
+        print(f"❌ Frontmatter parsing failed: {e}")
+        match = re.search(r"^\s*---\s*\n(.*?)(?:\n---\s*|$)", text, flags=re.S)
+        metadata = {}
+        if match:
+            yaml_content = match.group(1)
+            metadata = _parse_yaml_safely(yaml_content, topic)
+            content = _strip_frontmatter(text)
+        else:
+            content = text
+            metadata = {
+                "title": f"Article about {topic}",
+                "slug": topic.lower().replace(" ", "-"),
+            }
+        return frontmatter.Post(content, **metadata)
+
+
 def clean_llm_output(text, topic=None):
     """
     Clean up LLM-generated text by removing common artifacts and response phrases.
@@ -390,7 +411,7 @@ def main():
 
     # Extract YAML front matter
     try:
-        post = frontmatter.loads(blog_content)
+        post = safe_frontmatter_loads(blog_content, args.idea)
         metadata = post.metadata
         print(f"✅ Generated blog post with title: {metadata.get('title', 'Untitled')}")
 

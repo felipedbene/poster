@@ -13,6 +13,7 @@
 - Converted Markdown output to HTML before publishing to WordPress
 - Inserted inline images using the URL returned from the media upload endpoint
 - Truncated MLX image prompts to avoid token-length indexing errors on Apple NPU
+- Resolved YAML parsing failures when the LLM produces malformed front matter
 
 ## [Unreleased] - 2025-05-15
 
