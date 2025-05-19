@@ -1,6 +1,9 @@
 
 ## [Unreleased] - 2025-05-16
 
+### Added
+- `--refresh` option to bypass cached posts and images
+
 ### Changed
 - Replaced Ollama-based text generation with the `mlx.llm` API
 - Removed references to AUTOMATIC1111 and other non-Apple AI services

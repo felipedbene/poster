@@ -71,6 +71,7 @@ def generate_image_with_mlx(
     steps: int = 30,
     guidance_scale: float = 9.0,
     seed: Optional[int] = None,
+    refresh: bool = False,
 ) -> Optional[str]:
     """
     Generate an image using MLX Core and CoreML on Apple Silicon.
@@ -99,16 +100,18 @@ def generate_image_with_mlx(
         if not base_prompt.lower().startswith("a "):
             base_prompt = "A " + base_prompt
         # Add tech-focused style modifiers
-        enhanced_prompt = base_prompt + ", ultra-realistic, high-tech, technological, photorealistic, detailed, sharp focus"
+        enhanced_prompt = (
+            base_prompt
+            + ", ultra-realistic, high-tech, technological, photorealistic, detailed, sharp focus"
+        )
         print(f"🎨 Final tech prompt for MLX Core: {enhanced_prompt}")
-        
-        
+
         # Create cache directory and check for cached image
         os.makedirs(".cache/images", exist_ok=True)
         cache_key = hashlib.sha256(enhanced_prompt.encode()).hexdigest()
         webp_path = f".cache/images/{cache_key}.webp"
 
-        if os.path.exists(webp_path):
+        if not refresh and os.path.exists(webp_path):
             print("🖼️ Cached WebP image used")
             return webp_path
 

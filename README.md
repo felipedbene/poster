@@ -91,11 +91,13 @@ Generate a blog post with your own topic:
 
 ```bash
 python post.py --idea "Amazing new tech" --keyphrase "latest tech trends"
+# Add --refresh to ignore caches
+python post.py --idea "Amazing new tech" --refresh
 ```
 
 ## Features
 
-- 🔁 Reuses cached posts and images for speed
+- 🔁 Reuses cached posts and images for speed (use `--refresh` to force regeneration)
 - 📤 Automatically publishes or updates matching slugs
 - 🧠 Logs to both `poster.log` and stdout (Kubernetes friendly)
 - 🌐 Fully async-compatible design
