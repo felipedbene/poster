@@ -10,6 +10,7 @@ import re
 import logging
 import time
 import platform
+import inspect
 from dotenv import load_dotenv
 from markdown.extensions.fenced_code import FencedCodeExtension
 from markdown.extensions.codehilite import CodeHiliteExtension
@@ -155,14 +156,22 @@ Write a witty markdown blog post about "{topic}". Begin with YAML front matter f
         raise RuntimeError("mlx.lm is required for text generation")
 
     model, tokenizer = load_model(LLM_MODEL)
-    text = generate_llm(
-        model,
-        tokenizer,
-        prompt,
-        max_tokens=1800,
-        temperature=0.6,
-        verbose=False,
-    ).strip()
+
+    kwargs = {
+        "max_tokens": 1800,
+        "verbose": False,
+    }
+
+    # Newer versions of mlx_lm expect a "temperature" argument while older
+    # versions use "temp". Detect the supported name at runtime to avoid
+    # TypeError: generate_step() got an unexpected keyword argument
+    sig = inspect.signature(generate_llm)
+    if "temperature" in sig.parameters:
+        kwargs["temperature"] = 0.6
+    elif "temp" in sig.parameters:
+        kwargs["temp"] = 0.6
+
+    text = generate_llm(model, tokenizer, prompt, **kwargs).strip()
     with open(cache_path, "w") as f:
         f.write(text)
     return text
