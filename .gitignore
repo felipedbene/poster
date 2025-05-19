@@ -1,14 +1,16 @@
-# ignore just our virtualenv & envfile
+# 🐍 Python virtual environment & local secrets
 .venv/
 .env
-*.json
-*.png
-*.webp
 __pycache__/
 .cache/
-# ignore all our test files
+
+# 🧪 Ignore generated/test files
+*.json
+*.webp
+*.png
 *poster.yml
+
+# 🚫 Ignore local model folders
 ml-stable-diffusion/
-coreml-stable-diffusion-v1-5
 coreml-stable-diffusion-v1-5/
-.github/
+.github/coreml-stable-diffusion-v1-5/
