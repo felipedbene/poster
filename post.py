@@ -150,7 +150,7 @@ def generate_blog_components(topic):
         return cached
 
     prompt = f"""
-Write a witty markdown blog post about "{topic}". Begin with YAML front matter fenced by triple dashes containing: title, meta_title, meta_desc, slug, keyphrase, hero_image_prompt, inline_image_prompts, and alt_text. After the front matter, write the article in exactly three sections. Use a sarcastic tone throughout.
+Write a witty blog post about "{topic}" in Markdown. Format the output as a single file using YAML frontmatter: begin with `---`, include title, meta_title, meta_desc, slug, keyphrase, hero_image_prompt, inline_image_prompts, and alt_text, then close with `---`. After the frontmatter, write the article in exactly three sections using a sarcastic tone.
 """
 
     if load_model is None or generate_llm is None:
