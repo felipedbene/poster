@@ -7,6 +7,7 @@ Automatically generate, publish, and update SEO-optimized blog posts to WordPres
 **Trend Poster** continuously fetches trending headlines using NewsAPI and uses the `mlx.llm` model to generate:
 - Titles, meta descriptions, and keyphrases
 - Full blog posts written in Markdown and automatically converted to HTML (1000+ words)
+- Posts are returned in standard **Frontmatter** format for easy parsing
 - Featured image prompts (and auto-generated images)
 - SEO metadata integration (Yoast-compatible)
 - Seamless updates of existing posts (via slug detection)
